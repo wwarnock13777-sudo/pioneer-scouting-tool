@@ -122,7 +122,6 @@ function FieldDetail({ field, onBack }) {
         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
         All fields
       </button>
-
       <div style={{background:'var(--g)',borderRadius:16,padding:16,marginBottom:12,color:'#fff'}}>
         <div style={{fontSize:20,fontWeight:700}}>{field.op}</div>
         <div style={{fontSize:13,opacity:0.85,marginTop:3}}>{field.hybrid||'—'} · {field.loc||'—'}</div>
@@ -133,8 +132,6 @@ function FieldDetail({ field, onBack }) {
           ))}
         </div>
       </div>
-
-      {/* Field details */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Field details</span></div>
         <div style={{padding:'4px 14px 10px'}}>
@@ -145,14 +142,10 @@ function FieldDetail({ field, onBack }) {
           ))}
         </div>
       </div>
-
-      {/* Rainfall */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Rainfall — {stats.rain.toFixed(2)}" season total</span></div>
         <RainMiniLog fieldId={field.id} />
       </div>
-
-      {/* Photos */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Photos — {stats.photos.length}</span></div>
         <div style={{padding:'13px 14px'}}>
@@ -167,8 +160,6 @@ function FieldDetail({ field, onBack }) {
           )}
         </div>
       </div>
-
-      {/* Scout pins */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Scout pins — {stats.pins.length}</span></div>
         <div style={{padding:'4px 14px 8px'}}>
@@ -177,7 +168,7 @@ function FieldDetail({ field, onBack }) {
               <span style={{fontSize:22,marginTop:2}}>{emoji[p.cat]||'📍'}</span>
               <div style={{flex:1}}>
                 <div style={{fontSize:13,fontWeight:600}}>{p.cat||'Pin'} <span style={{color:'var(--mu)',fontWeight:400,fontSize:12}}>· {p.log_date}</span></div>
-                {p.notes && <div style={{fontSize:13,marginTop:3,color:'var(--tx)'}}>{p.notes}</div>}
+                {p.notes && <div style={{fontSize:13,marginTop:3}}>{p.notes}</div>}
                 <div style={{fontSize:11,color:'var(--hi)',marginTop:3}}>{Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)}</div>
                 {p.photo && <img src={p.photo} alt="pin" style={{width:'100%',borderRadius:8,marginTop:6,maxHeight:130,objectFit:'cover'}} />}
               </div>
@@ -185,7 +176,6 @@ function FieldDetail({ field, onBack }) {
           ))}
         </div>
       </div>
-
       {lightbox && (
         <div onClick={()=>setLightbox(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.93)',zIndex:200,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:20}}>
           <button onClick={()=>setLightbox(null)} style={{position:'absolute',top:52,right:20,background:'rgba(255,255,255,0.15)',border:'none',borderRadius:'50%',width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
@@ -325,37 +315,34 @@ function EntryTab({ onSaved, showToast }) {
 // GDU
 // ══════════════════════════════════════════════════════════════════════════════
 function GduTab({ fields, showToast }) {
-  const [fieldId, setFieldId] = useState('')
-  const [log, setLog] = useState([])
-  const [hi, setHi] = useState(''); const [lo, setLo] = useState(''); const [date, setDate] = useState(TODAY)
-  const [weather, setWeather] = useState(null)
-  const field = fields.find(f=>f.id===fieldId)
-  useEffect(()=>{ if(fieldId) load() },[fieldId])
-  async function load() {
-    const { data } = await supabase.from('gdu_log').select('*').eq('field_id',fieldId).order('log_date',{ascending:false})
-    setLog(data||[])
-  }
-  const total = log.reduce((s,e)=>s+Number(e.gdu),0)
-  async function addManual() {
+  const [fieldId,setFieldId]=useState('')
+  const [log,setLog]=useState([])
+  const [hi,setHi]=useState('');const [lo,setLo]=useState('');const [date,setDate]=useState(TODAY)
+  const [weather,setWeather]=useState(null)
+  const field=fields.find(f=>f.id===fieldId)
+  useEffect(()=>{if(fieldId)load()},[fieldId])
+  async function load(){const{data}=await supabase.from('gdu_log').select('*').eq('field_id',fieldId).order('log_date',{ascending:false});setLog(data||[])}
+  const total=log.reduce((s,e)=>s+Number(e.gdu),0)
+  async function addManual(){
     if(!hi||!lo||!date){showToast('Enter high, low, and date');return}
     const gdu=calcGdu(hi,lo)
     await supabase.from('gdu_log').insert([{field_id:fieldId,log_date:date,high_temp:Number(hi),low_temp:Number(lo),gdu}])
     setHi('');setLo('');setDate(TODAY);load();showToast(`Added ${gdu} GDUs`)
   }
-  async function addWeather() {
+  async function addWeather(){
     if(!weather)return
     await supabase.from('gdu_log').insert([{field_id:fieldId,log_date:weather.date,high_temp:weather.hi,low_temp:weather.lo,gdu:weather.gdu}])
     const g=weather.gdu;setWeather(null);load();showToast(`Added ${g} GDUs`)
   }
-  async function fetchWeather() {
+  async function fetchWeather(){
     if(!field?.zip){showToast('No zip on this field');return}
-    try {
+    try{
       const r=await fetch(`https://api.openweathermap.org/data/2.5/weather?zip=${field.zip},us&units=imperial&appid=bd5e378503939ddaee76f12ad7a97608`)
       const d=await r.json()
       if(!d.main){showToast('Weather not found');return}
       const hi=Math.round(d.main.temp_max),lo=Math.round(d.main.temp_min)
       setWeather({date:TODAY,hi,lo,gdu:calcGdu(hi,lo)})
-    } catch{showToast('Could not fetch weather')}
+    }catch{showToast('Could not fetch weather')}
   }
   return (
     <div style={s.view}>
@@ -532,7 +519,7 @@ function PhotosTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCOUT — auto blue dot, shapefile upload, hybrid zone detection
+// SCOUT — satellite map, auto blue dot, shapefile, camera roll
 // ══════════════════════════════════════════════════════════════════════════════
 function ScoutTab({ fields, showToast }) {
   const [fieldId,setFieldId]=useState('')
@@ -542,30 +529,29 @@ function ScoutTab({ fields, showToast }) {
   const [cat,setCat]=useState('');const [notes,setNotes]=useState('');const [pinPhoto,setPinPhoto]=useState(null)
   const [mapOpen,setMapOpen]=useState(true)
   const [currentHybrid,setCurrentHybrid]=useState(null)
-  const [zones,setZones]=useState([]) // [{hybrid, color, geojson layer}]
+  const [zones,setZones]=useState([])
   const mapRef=useRef(null);const mapObj=useRef(null);const markers=useRef([])
   const locMarker=useRef(null);const pathLine=useRef(null)
   const pathPts=useRef([]);const watchId=useRef(null)
   const zoneLayers=useRef([])
 
-  // Auto-start location tracking when tab opens
   useEffect(()=>{
     if(!mapObj.current){
       const L=window.L
       mapObj.current=L.map(mapRef.current,{zoomControl:true}).setView([41.5,-93.5],13)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mapObj.current)
+      // SATELLITE TILE LAYER
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(mapObj.current)
     }
-    // Auto-start blue dot
     startTracking()
-    return()=>{ if(watchId.current) navigator.geolocation.clearWatch(watchId.current) }
+    return()=>{if(watchId.current)navigator.geolocation.clearWatch(watchId.current)}
   },[])
 
   useEffect(()=>{if(fieldId)loadPins()},[fieldId])
-  useEffect(()=>{ renderMarkers() },[pins])
+  useEffect(()=>{renderMarkers()},[pins])
 
   function startTracking(){
     const L=window.L
-    if(watchId.current) navigator.geolocation.clearWatch(watchId.current)
+    if(watchId.current)navigator.geolocation.clearWatch(watchId.current)
     watchId.current=navigator.geolocation.watchPosition(pos=>{
       const{latitude:lat,longitude:lng}=pos.coords
       if(!locMarker.current){
@@ -575,27 +561,22 @@ function ScoutTab({ fields, showToast }) {
       } else {
         locMarker.current.setLatLng([lat,lng])
       }
-      // Draw path
       pathPts.current.push([lat,lng])
-      if(pathLine.current) mapObj.current.removeLayer(pathLine.current)
+      if(pathLine.current)mapObj.current.removeLayer(pathLine.current)
       if(pathPts.current.length>1){
-        pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.6}).addTo(mapObj.current)
+        pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.7}).addTo(mapObj.current)
       }
-      // Check which hybrid zone we're in
       checkZone(lat,lng)
-    },()=>{},{ enableHighAccuracy:true, maximumAge:2000, timeout:15000 })
+    },()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:15000})
   }
 
   function checkZone(lat,lng){
-    if(!zones.length){ setCurrentHybrid(null); return }
-    // Simple point-in-polygon check using leaflet bounds for each zone
+    if(!zones.length){setCurrentHybrid(null);return}
     const L=window.L
     const pt=L.latLng(lat,lng)
     for(let z of zones){
-      if(z.layer && z.layer.getBounds && z.layer.getBounds().contains(pt)){
-        // More precise check using GeoJSON
-        setCurrentHybrid(z.hybrid)
-        return
+      if(z.layer&&z.layer.getBounds&&z.layer.getBounds().contains(pt)){
+        setCurrentHybrid(z.hybrid);return
       }
     }
     setCurrentHybrid(null)
@@ -618,67 +599,46 @@ function ScoutTab({ fields, showToast }) {
     })
   }
 
-  function clearPath(){
-    if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}
-    pathPts.current=[];showToast('Path cleared')
-  }
-
-  // ── Shapefile handling ──────────────────────────────────────────────────────
   async function handleShapefile(e){
     const file=e.target.files[0];if(!file)return
     const L=window.L
-    // Dynamically load shpjs
     if(!window.shp){
       await new Promise((res,rej)=>{
-        const s=document.createElement('script')
-        s.src='https://unpkg.com/shpjs@latest/dist/shp.js'
-        s.onload=res;s.onerror=rej
-        document.head.appendChild(s)
+        const sc=document.createElement('script')
+        sc.src='https://unpkg.com/shpjs@latest/dist/shp.js'
+        sc.onload=res;sc.onerror=rej
+        document.head.appendChild(sc)
       })
     }
-    try {
+    try{
       showToast('Loading shapefile…')
       const buf=await file.arrayBuffer()
       const geojson=await window.shp(buf)
-      addZonesFromGeojson(geojson)
-    } catch(err){
+      const colors=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
+      const hybridKeys=['hybrid','Hybrid','HYBRID','variety','Variety','VARIETY','product','Product','PRODUCT','seed','Seed']
+      zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l));zoneLayers.current=[]
+      const newZones=[]
+      const features=(geojson.features||[geojson])
+      features.forEach((feat,i)=>{
+        const props=feat.properties||{}
+        const hybridVal=hybridKeys.reduce((f,k)=>f||(props[k]||''),'') || `Zone ${i+1}`
+        const color=colors[i%colors.length]
+        const layer=L.geoJSON(feat,{style:{color,weight:2,fillColor:color,fillOpacity:0.2},
+          onEachFeature:(f,l)=>l.bindPopup(`<strong>${hybridVal}</strong>`)
+        }).addTo(mapObj.current)
+        zoneLayers.current.push(layer)
+        newZones.push({hybrid:hybridVal,color,layer})
+      })
+      setZones(newZones)
+      if(zoneLayers.current.length){
+        const group=L.featureGroup(zoneLayers.current)
+        mapObj.current.fitBounds(group.getBounds(),{padding:[20,20]})
+      }
+      showToast(`Loaded ${features.length} zone${features.length!==1?'s':''}!`)
+    }catch(err){
       showToast('Could not read shapefile. Try a .zip with .shp/.dbf/.prj inside.')
-      console.error(err)
     }
     e.target.value=''
-  }
-
-  function addZonesFromGeojson(geojson){
-    const L=window.L
-    // Remove old zone layers
-    zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l))
-    zoneLayers.current=[]
-    const newZones=[]
-    const colors=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
-    const features=geojson.features||[geojson]
-    // Try to detect hybrid field from common attribute names
-    const hybridKeys=['hybrid','Hybrid','HYBRID','variety','Variety','VARIETY','product','Product','PRODUCT','seed','Seed']
-
-    features.forEach((feat,i)=>{
-      const props=feat.properties||{}
-      const hybridVal=hybridKeys.reduce((found,k)=>found||(props[k]||''),'') || `Zone ${i+1}`
-      const color=colors[i%colors.length]
-      const layer=L.geoJSON(feat,{
-        style:{ color, weight:2, fillColor:color, fillOpacity:0.15 },
-        onEachFeature:(f,l)=>{
-          l.bindPopup(`<strong>${hybridVal}</strong><br/>${Object.entries(props).filter(([k])=>hybridKeys.includes(k)).map(([k,v])=>`${k}: ${v}`).join('<br/>')||'No hybrid info in shapefile'}`)
-        }
-      }).addTo(mapObj.current)
-      zoneLayers.current.push(layer)
-      newZones.push({ hybrid:hybridVal, color, layer })
-    })
-    setZones(newZones)
-    // Zoom to shapefile
-    if(zoneLayers.current.length){
-      const group=L.featureGroup(zoneLayers.current)
-      mapObj.current.fitBounds(group.getBounds(),{padding:[20,20]})
-    }
-    showToast(`Loaded ${features.length} zone${features.length!==1?'s':''}!`)
   }
 
   function dropPin(){
@@ -703,18 +663,16 @@ function ScoutTab({ fields, showToast }) {
     <div style={s.view}>
       <FieldSelect fields={fields} value={fieldId} onChange={setFieldId} />
 
-      {/* Current hybrid banner */}
-      {currentHybrid && (
+      {currentHybrid&&(
         <div style={{background:'#2979ff',borderRadius:10,padding:'10px 14px',marginBottom:10,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
           <span style={{fontSize:18}}>🌽</span>
           <div><div style={{fontSize:11,opacity:0.8}}>Currently standing in</div><div style={{fontSize:15,fontWeight:700}}>{currentHybrid}</div></div>
         </div>
       )}
 
-      {/* Map toggle */}
       <div style={{marginBottom:10}}>
         <button onClick={()=>setMapOpen(o=>!o)} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
-          <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span> Live map</span>
+          <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span>Satellite map</span>
           <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
         </button>
         <div style={{display:mapOpen?'block':'none',border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden'}}>
@@ -722,11 +680,10 @@ function ScoutTab({ fields, showToast }) {
         </div>
       </div>
 
-      {/* Shapefile upload */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>As-planted field map</span></div>
         <div style={s.cb}>
-          {zones.length>0 && (
+          {zones.length>0&&(
             <div>
               {zones.map((z,i)=>(
                 <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid #f5f5f0',fontSize:13}}>
@@ -739,32 +696,26 @@ function ScoutTab({ fields, showToast }) {
           <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:20,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
             <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
             <p style={{fontSize:14,color:'var(--mu)',fontWeight:500}}>{zones.length?'Upload new shapefile':'Upload as-planted shapefile'}</p>
-            <p style={{fontSize:12,color:'var(--hi)',marginTop:4}}>Zipped .shp file (.zip containing .shp, .dbf, .prj)</p>
+            <p style={{fontSize:12,color:'var(--hi)',marginTop:4}}>Zipped shapefile (.zip with .shp .dbf .prj)</p>
             <input type="file" accept=".zip,.shp" onChange={handleShapefile} style={{display:'none'}} />
           </label>
-          {zones.length>0 && (
-            <button style={{...s.btnOut,marginTop:0}} onClick={()=>{
-              zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l))
-              zoneLayers.current=[];setZones([]);setCurrentHybrid(null)
-              showToast('Field map cleared')
-            }}>Remove field map</button>
+          {zones.length>0&&(
+            <button style={{...s.btnOut,marginTop:0}} onClick={()=>{zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l));zoneLayers.current=[];setZones([]);setCurrentHybrid(null);showToast('Field map cleared')}}>Remove field map</button>
           )}
         </div>
       </div>
 
-      {/* Actions */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
         <button style={s.btn} onClick={dropPin}>
           <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           Drop pin
         </button>
-        <button style={{...s.btn,background:'#607d8b'}} onClick={clearPath}>
+        <button style={{...s.btn,background:'#607d8b'}} onClick={()=>{if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}pathPts.current=[];showToast('Path cleared')}}>
           <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
           Clear path
         </button>
       </div>
 
-      {/* Pin list */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Scout pins ({pins.length})</span></div>
         <div style={{padding:'4px 14px'}}>
@@ -781,7 +732,6 @@ function ScoutTab({ fields, showToast }) {
         </div>
       </div>
 
-      {/* Pin modal */}
       {modal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:150,display:'flex',alignItems:'flex-end'}}>
           <div style={{background:'#fff',borderRadius:'20px 20px 0 0',padding:'20px 16px 36px',width:'100%',maxHeight:'85vh',overflowY:'auto'}}>
