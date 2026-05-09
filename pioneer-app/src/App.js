@@ -478,11 +478,18 @@ function PhotosTab({ fields, showToast }) {
         <div style={s.card}>
           <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Add photo</span></div>
           <div style={s.cb}>
-            <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:24,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
-              <svg viewBox="0 0 24 24" width="32" height="32" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              <p style={{fontSize:14,color:'var(--mu)'}}>Tap to take photo or choose from library</p>
-              <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{display:'none'}} />
-            </label>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+              <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:18,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
+                <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p style={{fontSize:13,color:'var(--mu)',fontWeight:500}}>Take photo</p>
+                <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{display:'none'}} />
+              </label>
+              <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:18,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
+                <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M3 9h4l2-2h6l2 2h4"/></svg>
+                <p style={{fontSize:13,color:'var(--mu)',fontWeight:500}}>Camera roll</p>
+                <input type="file" accept="image/*" onChange={handleFile} style={{display:'none'}} />
+              </label>
+            </div>
             {preview&&<img src={preview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}} />}
             <div style={s.fg}><label style={s.lbl}>Notes / observation</label><textarea style={s.ta} rows="2" value={note} onChange={e=>setNote(e.target.value)} placeholder="What are you seeing?" /></div>
             <div style={s.fg}><label style={s.lbl}>Date</label><input style={s.inp} type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
@@ -525,7 +532,7 @@ function PhotosTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCOUT — live GPS tracking + path drawing
+// SCOUT — auto blue dot, shapefile upload, hybrid zone detection
 // ══════════════════════════════════════════════════════════════════════════════
 function ScoutTab({ fields, showToast }) {
   const [fieldId,setFieldId]=useState('')
@@ -533,25 +540,66 @@ function ScoutTab({ fields, showToast }) {
   const [modal,setModal]=useState(false)
   const [pending,setPending]=useState(null)
   const [cat,setCat]=useState('');const [notes,setNotes]=useState('');const [pinPhoto,setPinPhoto]=useState(null)
-  const [tracking,setTracking]=useState(false)
+  const [mapOpen,setMapOpen]=useState(true)
+  const [currentHybrid,setCurrentHybrid]=useState(null)
+  const [zones,setZones]=useState([]) // [{hybrid, color, geojson layer}]
   const mapRef=useRef(null);const mapObj=useRef(null);const markers=useRef([])
   const locMarker=useRef(null);const pathLine=useRef(null)
   const pathPts=useRef([]);const watchId=useRef(null)
+  const zoneLayers=useRef([])
 
+  // Auto-start location tracking when tab opens
   useEffect(()=>{
     if(!mapObj.current){
       const L=window.L
-      mapObj.current=L.map(mapRef.current,{zoomControl:true}).setView([41.5,-93.5],12)
+      mapObj.current=L.map(mapRef.current,{zoomControl:true}).setView([41.5,-93.5],13)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(mapObj.current)
-      navigator.geolocation.getCurrentPosition(pos=>{
-        mapObj.current.setView([pos.coords.latitude,pos.coords.longitude],15)
-      },()=>{},{enableHighAccuracy:true})
     }
-    return()=>{if(watchId.current)navigator.geolocation.clearWatch(watchId.current)}
+    // Auto-start blue dot
+    startTracking()
+    return()=>{ if(watchId.current) navigator.geolocation.clearWatch(watchId.current) }
   },[])
 
   useEffect(()=>{if(fieldId)loadPins()},[fieldId])
-  useEffect(()=>{renderMarkers()},[pins])
+  useEffect(()=>{ renderMarkers() },[pins])
+
+  function startTracking(){
+    const L=window.L
+    if(watchId.current) navigator.geolocation.clearWatch(watchId.current)
+    watchId.current=navigator.geolocation.watchPosition(pos=>{
+      const{latitude:lat,longitude:lng}=pos.coords
+      if(!locMarker.current){
+        const dotIcon=L.divIcon({html:`<div style="width:18px;height:18px;background:#2979ff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(41,121,255,0.8)"></div>`,className:'',iconSize:[18,18],iconAnchor:[9,9]})
+        locMarker.current=L.marker([lat,lng],{icon:dotIcon,zIndexOffset:1000}).addTo(mapObj.current)
+        mapObj.current.setView([lat,lng],16)
+      } else {
+        locMarker.current.setLatLng([lat,lng])
+      }
+      // Draw path
+      pathPts.current.push([lat,lng])
+      if(pathLine.current) mapObj.current.removeLayer(pathLine.current)
+      if(pathPts.current.length>1){
+        pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.6}).addTo(mapObj.current)
+      }
+      // Check which hybrid zone we're in
+      checkZone(lat,lng)
+    },()=>{},{ enableHighAccuracy:true, maximumAge:2000, timeout:15000 })
+  }
+
+  function checkZone(lat,lng){
+    if(!zones.length){ setCurrentHybrid(null); return }
+    // Simple point-in-polygon check using leaflet bounds for each zone
+    const L=window.L
+    const pt=L.latLng(lat,lng)
+    for(let z of zones){
+      if(z.layer && z.layer.getBounds && z.layer.getBounds().contains(pt)){
+        // More precise check using GeoJSON
+        setCurrentHybrid(z.hybrid)
+        return
+      }
+    }
+    setCurrentHybrid(null)
+  }
 
   async function loadPins(){
     const{data}=await supabase.from('scout_pins').select('*').eq('field_id',fieldId).order('log_date',{ascending:false})
@@ -570,31 +618,67 @@ function ScoutTab({ fields, showToast }) {
     })
   }
 
-  function toggleTracking(){
+  function clearPath(){
+    if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}
+    pathPts.current=[];showToast('Path cleared')
+  }
+
+  // ── Shapefile handling ──────────────────────────────────────────────────────
+  async function handleShapefile(e){
+    const file=e.target.files[0];if(!file)return
     const L=window.L
-    if(tracking){
-      if(watchId.current){navigator.geolocation.clearWatch(watchId.current);watchId.current=null}
-      setTracking(false);showToast('Tracking stopped')
-    } else {
-      pathPts.current=[]
-      if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}
-      watchId.current=navigator.geolocation.watchPosition(pos=>{
-        const{latitude:lat,longitude:lng}=pos.coords
-        if(!locMarker.current){
-          const dotIcon=L.divIcon({html:`<div style="width:16px;height:16px;background:#2979ff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(41,121,255,0.7)"></div>`,className:'',iconSize:[16,16],iconAnchor:[8,8]})
-          locMarker.current=L.marker([lat,lng],{icon:dotIcon,zIndexOffset:1000}).addTo(mapObj.current)
-        } else {
-          locMarker.current.setLatLng([lat,lng])
-        }
-        mapObj.current.panTo([lat,lng])
-        pathPts.current.push([lat,lng])
-        if(pathLine.current)mapObj.current.removeLayer(pathLine.current)
-        if(pathPts.current.length>1){
-          pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.75}).addTo(mapObj.current)
-        }
-      },()=>showToast('Location error — check permissions'),{enableHighAccuracy:true,maximumAge:2000,timeout:15000})
-      setTracking(true);showToast('Live tracking started!')
+    // Dynamically load shpjs
+    if(!window.shp){
+      await new Promise((res,rej)=>{
+        const s=document.createElement('script')
+        s.src='https://unpkg.com/shpjs@latest/dist/shp.js'
+        s.onload=res;s.onerror=rej
+        document.head.appendChild(s)
+      })
     }
+    try {
+      showToast('Loading shapefile…')
+      const buf=await file.arrayBuffer()
+      const geojson=await window.shp(buf)
+      addZonesFromGeojson(geojson)
+    } catch(err){
+      showToast('Could not read shapefile. Try a .zip with .shp/.dbf/.prj inside.')
+      console.error(err)
+    }
+    e.target.value=''
+  }
+
+  function addZonesFromGeojson(geojson){
+    const L=window.L
+    // Remove old zone layers
+    zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l))
+    zoneLayers.current=[]
+    const newZones=[]
+    const colors=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
+    const features=geojson.features||[geojson]
+    // Try to detect hybrid field from common attribute names
+    const hybridKeys=['hybrid','Hybrid','HYBRID','variety','Variety','VARIETY','product','Product','PRODUCT','seed','Seed']
+
+    features.forEach((feat,i)=>{
+      const props=feat.properties||{}
+      const hybridVal=hybridKeys.reduce((found,k)=>found||(props[k]||''),'') || `Zone ${i+1}`
+      const color=colors[i%colors.length]
+      const layer=L.geoJSON(feat,{
+        style:{ color, weight:2, fillColor:color, fillOpacity:0.15 },
+        onEachFeature:(f,l)=>{
+          l.bindPopup(`<strong>${hybridVal}</strong><br/>${Object.entries(props).filter(([k])=>hybridKeys.includes(k)).map(([k,v])=>`${k}: ${v}`).join('<br/>')||'No hybrid info in shapefile'}`)
+        }
+      }).addTo(mapObj.current)
+      zoneLayers.current.push(layer)
+      newZones.push({ hybrid:hybridVal, color, layer })
+    })
+    setZones(newZones)
+    // Zoom to shapefile
+    if(zoneLayers.current.length){
+      const group=L.featureGroup(zoneLayers.current)
+      mapObj.current.fitBounds(group.getBounds(),{padding:[20,20]})
+    }
+    showToast(`Loaded ${features.length} zone${features.length!==1?'s':''}!`)
   }
 
   function dropPin(){
@@ -618,29 +702,69 @@ function ScoutTab({ fields, showToast }) {
   return (
     <div style={s.view}>
       <FieldSelect fields={fields} value={fieldId} onChange={setFieldId} />
-      <div ref={mapRef} style={{width:'100%',height:'48vh',borderRadius:14,overflow:'hidden',border:'1px solid var(--bdr)',marginBottom:10}} />
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-        <button style={{...s.btn,background:tracking?'#c0392b':'var(--g)'}} onClick={toggleTracking}>
-          <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2">{tracking?<><rect x="6" y="6" width="12" height="12" fill="#fff" stroke="none"/></>:<polygon points="10 8 16 12 10 16 10 8" fill="#fff" stroke="none"/>}</svg>
-          {tracking?'Stop tracking':'Track my walk'}
+      {/* Current hybrid banner */}
+      {currentHybrid && (
+        <div style={{background:'#2979ff',borderRadius:10,padding:'10px 14px',marginBottom:10,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:18}}>🌽</span>
+          <div><div style={{fontSize:11,opacity:0.8}}>Currently standing in</div><div style={{fontSize:15,fontWeight:700}}>{currentHybrid}</div></div>
+        </div>
+      )}
+
+      {/* Map toggle */}
+      <div style={{marginBottom:10}}>
+        <button onClick={()=>setMapOpen(o=>!o)} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+          <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span> Live map</span>
+          <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
         </button>
-        <button style={{...s.btn,background:'#607d8b'}} onClick={()=>{
-          if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}
-          pathPts.current=[];showToast('Path cleared')
-        }}>
+        <div style={{display:mapOpen?'block':'none',border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden'}}>
+          <div ref={mapRef} style={{width:'100%',height:'45vh'}} />
+        </div>
+      </div>
+
+      {/* Shapefile upload */}
+      <div style={s.card}>
+        <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>As-planted field map</span></div>
+        <div style={s.cb}>
+          {zones.length>0 && (
+            <div>
+              {zones.map((z,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid #f5f5f0',fontSize:13}}>
+                  <div style={{width:14,height:14,borderRadius:3,background:z.color,flexShrink:0}} />
+                  <span style={{fontWeight:500}}>{z.hybrid}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:20,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
+            <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+            <p style={{fontSize:14,color:'var(--mu)',fontWeight:500}}>{zones.length?'Upload new shapefile':'Upload as-planted shapefile'}</p>
+            <p style={{fontSize:12,color:'var(--hi)',marginTop:4}}>Zipped .shp file (.zip containing .shp, .dbf, .prj)</p>
+            <input type="file" accept=".zip,.shp" onChange={handleShapefile} style={{display:'none'}} />
+          </label>
+          {zones.length>0 && (
+            <button style={{...s.btnOut,marginTop:0}} onClick={()=>{
+              zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l))
+              zoneLayers.current=[];setZones([]);setCurrentHybrid(null)
+              showToast('Field map cleared')
+            }}>Remove field map</button>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+        <button style={s.btn} onClick={dropPin}>
+          <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Drop pin
+        </button>
+        <button style={{...s.btn,background:'#607d8b'}} onClick={clearPath}>
           <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
           Clear path
         </button>
       </div>
 
-      {tracking&&<div style={{background:'rgba(41,121,255,0.08)',border:'1px solid rgba(41,121,255,0.3)',borderRadius:10,padding:'10px 12px',fontSize:13,color:'#1a56cc',marginBottom:10}}>📍 Live tracking active — blue dot shows your location, path draws as you walk</div>}
-
-      <button style={{...s.btn,marginBottom:12}} onClick={dropPin}>
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        Drop pin at my location
-      </button>
-
+      {/* Pin list */}
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Scout pins ({pins.length})</span></div>
         <div style={{padding:'4px 14px'}}>
@@ -657,11 +781,13 @@ function ScoutTab({ fields, showToast }) {
         </div>
       </div>
 
+      {/* Pin modal */}
       {modal&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:150,display:'flex',alignItems:'flex-end'}}>
           <div style={{background:'#fff',borderRadius:'20px 20px 0 0',padding:'20px 16px 36px',width:'100%',maxHeight:'85vh',overflowY:'auto'}}>
             <div style={{width:40,height:4,background:'var(--bdr)',borderRadius:2,margin:'0 auto 16px'}} />
-            <h3 style={{fontSize:16,fontWeight:600,marginBottom:14}}>New scout pin</h3>
+            <h3 style={{fontSize:16,fontWeight:600,marginBottom:4}}>New scout pin</h3>
+            {currentHybrid&&<div style={{fontSize:13,color:'#2979ff',fontWeight:500,marginBottom:12}}>📍 Dropping in: {currentHybrid}</div>}
             <label style={s.lbl}>Category</label>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,margin:'6px 0 14px'}}>
               {cats.map(c=>(
@@ -673,12 +799,19 @@ function ScoutTab({ fields, showToast }) {
             <div style={{...s.fg,marginBottom:11}}><label style={s.lbl}>Notes</label><textarea style={s.ta} rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Describe what you're seeing…" /></div>
             <div style={{...s.fg,marginBottom:11}}>
               <label style={s.lbl}>Photo (optional)</label>
-              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 13px'}}>
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                <span style={{fontSize:14,color:'var(--mu)'}}>Take or choose photo</span>
-                <input type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;compress(f,800,0.65,d=>setPinPhoto(d))}} style={{display:'none'}} />
-              </label>
-              {pinPhoto&&<img src={pinPhoto} alt="preview" style={{width:'100%',height:120,objectFit:'cover',borderRadius:9,marginTop:4}} />}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <label style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
+                  <svg viewBox="0 0 24 24" width="22" height="22" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style={{fontSize:12,color:'var(--mu)'}}>Take photo</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;compress(f,800,0.65,d=>setPinPhoto(d))}} style={{display:'none'}} />
+                </label>
+                <label style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
+                  <svg viewBox="0 0 24 24" width="22" height="22" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M3 9h4l2-2h6l2 2h4"/></svg>
+                  <span style={{fontSize:12,color:'var(--mu)'}}>Camera roll</span>
+                  <input type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;compress(f,800,0.65,d=>setPinPhoto(d))}} style={{display:'none'}} />
+                </label>
+              </div>
+              {pinPhoto&&<img src={pinPhoto} alt="preview" style={{width:'100%',height:120,objectFit:'cover',borderRadius:9,marginTop:8}} />}
             </div>
             <button style={{...s.btn,marginBottom:10}} onClick={savePin}>Save pin</button>
             <button style={s.btnOut} onClick={()=>setModal(false)}>Cancel</button>
