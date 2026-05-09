@@ -1033,7 +1033,7 @@ function LoginScreen({ onLogin }) {
                 {pin.length < 4 ? 'Create your 4-digit PIN' : 'Confirm your PIN'}
               </div>
               <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20 }}>
-                {pin.length < 4 ? 'You'll use this to log in next time' : 'Enter your PIN again to confirm'}
+                {pin.length < 4 ? "You'll use this to log in next time" : 'Enter your PIN again to confirm'}
               </div>
             </>
           ) : (
