@@ -241,6 +241,84 @@ function DashboardTab({ fields, onRefresh }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// WEATHER BACKFILL — fetch historical data from plant date to today
+// ══════════════════════════════════════════════════════════════════════════════
+async function backfillWeather(fieldId, plantDate, zip, showToast) {
+  const OWM_KEY = 'bd5e378503939ddaee76f12ad7a97608'
+  const today = new Date()
+  const start = new Date(plantDate)
+  const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24))
+
+  if (diffDays <= 0) return // planted today or future, nothing to backfill
+
+  // Get lat/lon from zip first (needed for historical API)
+  let lat, lon
+  try {
+    const geoRes = await fetch(`https://api.openweathermap.org/geo/1.0/zip?zip=${zip},US&appid=${OWM_KEY}`)
+    const geo = await geoRes.json()
+    if (!geo.lat) { showToast('Could not get location for zip'); return }
+    lat = geo.lat; lon = geo.lon
+  } catch { showToast('Weather backfill failed — check zip code'); return }
+
+  // Get already-logged dates so we don't duplicate
+  const { data: existing } = await supabase.from('gdu_log').select('log_date').eq('field_id', fieldId)
+  const loggedDates = new Set((existing||[]).map(r => r.log_date))
+
+  let gduCount = 0, rainCount = 0, daysProcessed = 0
+  const daysToFill = Math.min(diffDays, 60) // cap at 60 days back
+
+  for (let i = 1; i <= daysToFill; i++) {
+    const d = new Date(start)
+    d.setDate(d.getDate() + i)
+    if (d >= today) break
+
+    const dateStr = d.toISOString().split('T')[0]
+    if (loggedDates.has(dateStr)) continue
+
+    const unixTs = Math.floor(d.getTime() / 1000)
+
+    try {
+      const r = await fetch(`https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${lat}&lon=${lon}&dt=${unixTs}&units=imperial&appid=${OWM_KEY}`)
+      const data = await r.json()
+
+      // Try data.data[0] (v3) or data.hourly (v2 fallback)
+      const dayData = data.data?.[0] || null
+      if (!dayData) continue
+
+      // Get high/low from hourly if available
+      let hi = dayData.temp, lo = dayData.temp
+      if (data.data && data.data.length > 1) {
+        const temps = data.data.map(h => h.temp)
+        hi = Math.max(...temps)
+        lo = Math.min(...temps)
+      }
+
+      hi = Math.round(hi); lo = Math.round(lo)
+      const gdu = Math.max(0, Math.round((((Math.min(hi,86) + Math.max(lo,50)) / 2) - 50) * 10) / 10)
+      const rainMm = dayData.rain || 0
+      const rainIn = Math.round(rainMm / 25.4 * 100) / 100
+
+      await supabase.from('gdu_log').insert([{ field_id:fieldId, log_date:dateStr, high_temp:hi, low_temp:lo, gdu }])
+      gduCount++
+
+      if (rainIn > 0) {
+        await supabase.from('rain_log').insert([{ field_id:fieldId, log_date:dateStr, amount:rainIn, note:'Auto backfilled' }])
+        rainCount++
+      }
+      daysProcessed++
+    } catch(e) {
+      continue // skip days that fail
+    }
+  }
+
+  if (daysProcessed > 0) {
+    showToast(`✓ Backfilled ${daysProcessed} days — ${gduCount} GDU entries, ${rainCount} rain events`)
+  } else {
+    showToast('Field saved! No historical data needed.')
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
 function EntryTab({ onSaved, showToast }) {
@@ -257,13 +335,17 @@ function EntryTab({ onSaved, showToast }) {
     const ftiming = sel.ftiming==='Other'?(form.ftiming_other||'Other'):sel.ftiming
     const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, saved_at:new Date().toLocaleDateString()}
     delete row.tillage_other; delete row.ftiming_other
-    const { error } = await supabase.from('fields').insert([row])
+    const { data: newField, error } = await supabase.from('fields').insert([row]).select().single()
     setSaving(false)
     if (error) { showToast('Save failed: '+error.message); return }
     const sub = encodeURIComponent(`Pioneer Field Data — ${form.op} — ${form.plant_date}`)
     const body = encodeURIComponent(`Pioneer Field: ${form.op}\nHybrid: ${form.hybrid||'—'}\nLocation: ${form.loc||'—'}\nDate: ${form.plant_date}`)
     window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
-    showToast('Field saved!'); onSaved()
+    showToast('Field saved! Backfilling weather data…'); onSaved()
+    // Backfill historical weather if plant_date is in the past
+    if (newField && form.plant_date && form.zip) {
+      backfillWeather(newField.id, form.plant_date, form.zip, showToast)
+    }
     setForm({ op:'', grower:'', rep:'', phone:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
     setSel({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   }
