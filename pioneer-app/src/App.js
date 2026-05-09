@@ -807,27 +807,250 @@ function ScoutTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// LOGIN SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
+const ADMIN_PIN = '0726'
+
+function LoginScreen({ onLogin }) {
+  const [step, setStep] = useState(1) // 1=op name, 2=PIN
+  const [opName, setOpName] = useState('')
+  const [pin, setPin] = useState('')
+  const [isNew, setIsNew] = useState(false)
+  const [confirmPin, setConfirmPin] = useState('')
+  const [error, setError] = useState('')
+  const [checking, setChecking] = useState(false)
+
+  async function handleOpSubmit() {
+    const val = opName.trim()
+    if (!val) { setError('Enter your operation name'); return }
+    setError('')
+    if (val.toLowerCase() === 'admin') {
+      setIsNew(false); setStep(2); return
+    }
+    setChecking(true)
+    // Check if this operation exists in DB with a PIN set
+    const { data } = await supabase.from('user_pins').select('pin').eq('op_name', val.toLowerCase()).single()
+    setChecking(false)
+    if (data) {
+      setIsNew(false)
+    } else {
+      setIsNew(true) // new user — will create PIN
+    }
+    setStep(2)
+  }
+
+  async function handlePinSubmit() {
+    setError('')
+    // Admin login
+    if (opName.trim().toLowerCase() === 'admin') {
+      if (pin === ADMIN_PIN) {
+        onLogin({ role: 'admin', opName: 'Admin' })
+      } else {
+        setError('Incorrect PIN'); setPin('')
+      }
+      return
+    }
+
+    if (isNew) {
+      // Creating new PIN
+      if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
+      if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
+      const { error: dbErr } = await supabase.from('user_pins').insert([{ op_name: opName.trim().toLowerCase(), pin }])
+      if (dbErr) { setError('Error saving PIN. Try again.'); return }
+      onLogin({ role: 'customer', opName: opName.trim() })
+    } else {
+      // Existing PIN check
+      const { data } = await supabase.from('user_pins').select('pin').eq('op_name', opName.trim().toLowerCase()).single()
+      if (data && data.pin === pin) {
+        onLogin({ role: 'customer', opName: opName.trim() })
+      } else {
+        setError('Incorrect PIN'); setPin('')
+      }
+    }
+  }
+
+  const pinBoxStyle = (filled) => ({
+    width:56, height:64, border: filled ? '2px solid var(--g)' : '2px solid var(--bdr)',
+    borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center',
+    fontSize:28, fontWeight:700, color:'var(--tx)', background: filled ? 'var(--gl)' : '#f8f8f5'
+  })
+
+  const numBtn = (n) => (
+    <button key={n} onClick={() => {
+      if (step === 2) {
+        if (!isNew || confirmPin.length < 4 || pin.length < 4) {
+          if (isNew && pin.length === 4) {
+            if (confirmPin.length < 4) setConfirmPin(c => c.length < 4 ? c + n : c)
+          } else {
+            setPin(p => p.length < 4 ? p + n : p)
+          }
+        }
+      }
+    }} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      {n}
+    </button>
+  )
+
+  const handleNum = (n) => {
+    if (isNew && pin.length === 4) {
+      setConfirmPin(c => c.length < 4 ? c + n : c)
+    } else {
+      setPin(p => p.length < 4 ? p + n : p)
+    }
+  }
+
+  const handleBack = () => {
+    if (isNew && pin.length === 4) {
+      setConfirmPin(c => c.slice(0, -1))
+    } else {
+      setPin(p => p.slice(0, -1))
+    }
+  }
+
+  const nums = ['1','2','3','4','5','6','7','8','9','','0','⌫']
+
+  return (
+    <div style={{ minHeight:'100vh', background:'var(--bg)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
+      <div style={{ marginBottom:32, textAlign:'center' }}>
+        <div style={{ width:72, height:72, background:'var(--g)', borderRadius:20, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+          <svg viewBox="0 0 100 100" width="48" height="48"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
+        </div>
+        <div style={{ fontSize:22, fontWeight:700, color:'var(--tx)' }}>Round Prairie Field Tracker</div>
+        <div style={{ fontSize:14, color:'var(--mu)', marginTop:4 }}>Pioneer® Hybrid Showcase</div>
+      </div>
+
+      {step === 1 && (
+        <div style={{ width:'100%', maxWidth:340 }}>
+          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your operation name</div>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Type "admin" for full access</div>
+          <input
+            style={{ ...s.inp, fontSize:17, padding:'14px', marginBottom:12, textAlign:'center' }}
+            value={opName}
+            onChange={e => setOpName(e.target.value)}
+            placeholder="Operation name"
+            onKeyDown={e => e.key === 'Enter' && handleOpSubmit()}
+            autoFocus
+          />
+          {error && <div style={{ color:'#c0392b', fontSize:13, textAlign:'center', marginBottom:10 }}>{error}</div>}
+          <button style={s.btn} onClick={handleOpSubmit} disabled={checking}>
+            {checking ? 'Checking…' : 'Continue →'}
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div style={{ width:'100%', maxWidth:340, textAlign:'center' }}>
+          <button onClick={() => { setStep(1); setPin(''); setConfirmPin(''); setError('') }} style={{ background:'none', border:'none', color:'var(--mu)', fontSize:13, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', gap:4, margin:'0 auto 16px' }}>
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Back
+          </button>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:4 }}>{opName}</div>
+          {isNew ? (
+            <>
+              <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:4 }}>
+                {pin.length < 4 ? 'Create your 4-digit PIN' : 'Confirm your PIN'}
+              </div>
+              <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20 }}>
+                {pin.length < 4 ? 'You'll use this to log in next time' : 'Enter your PIN again to confirm'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:20 }}>Enter your PIN</div>
+          )}
+
+          {/* PIN dots display */}
+          <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:8 }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={pinBoxStyle(isNew ? (pin.length < 4 ? i < pin.length : i < confirmPin.length) : i < pin.length)}>
+                {isNew ? (pin.length < 4 ? (i < pin.length ? '●' : '') : (i < confirmPin.length ? '●' : '')) : (i < pin.length ? '●' : '')}
+              </div>
+            ))}
+          </div>
+          {isNew && pin.length === 4 && <div style={{ fontSize:11, color:'var(--g)', fontWeight:600, marginBottom:8, letterSpacing:'0.04em', textTransform:'uppercase' }}>Confirming PIN</div>}
+
+          {error && <div style={{ color:'#c0392b', fontSize:13, marginBottom:12 }}>{error}</div>}
+
+          {/* Number pad */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, maxWidth:260, margin:'16px auto 0' }}>
+            {nums.map((n, i) => {
+              if (n === '') return <div key={i} />
+              if (n === '⌫') return (
+                <button key={i} onClick={handleBack} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }}>⌫</button>
+              )
+              return (
+                <button key={i} onClick={() => handleNum(n)} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }}>{n}</button>
+              )
+            })}
+          </div>
+
+          {/* Submit when PIN complete */}
+          {((isNew && pin.length === 4 && confirmPin.length === 4) || (!isNew && pin.length === 4)) && (
+            <button style={{ ...s.btn, marginTop:20 }} onClick={handlePinSubmit}>
+              {isNew ? 'Create PIN & Sign in' : 'Sign in'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
 // ══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [tab,setTab]=useState('dashboard')
   const [fields,setFields]=useState([])
   const [toast,setToast]=useState('')
+  const [user,setUser]=useState(null) // {role:'admin'|'customer', opName:'...'}
   const timer=useRef(null)
 
-  useEffect(()=>{loadFields()},[])
-  async function loadFields(){
-    const{data}=await supabase.from('fields').select('*').order('created_at',{ascending:false})
+  useEffect(()=>{
+    // Restore session from sessionStorage
+    const saved = sessionStorage.getItem('pioneer_user')
+    if (saved) {
+      const u = JSON.parse(saved)
+      setUser(u)
+      loadFields(u)
+    }
+  },[])
+
+  async function loadFields(u) {
+    const activeUser = u || user
+    if (!activeUser) return
+    let query = supabase.from('fields').select('*').order('created_at',{ascending:false})
+    if (activeUser.role === 'customer') {
+      query = query.ilike('op', activeUser.opName)
+    }
+    const{data}=await query
     setFields(data||[])
   }
+
+  function handleLogin(u) {
+    setUser(u)
+    sessionStorage.setItem('pioneer_user', JSON.stringify(u))
+    loadFields(u)
+  }
+
+  function handleLogout() {
+    setUser(null)
+    sessionStorage.removeItem('pioneer_user')
+    setFields([])
+    setTab('dashboard')
+  }
+
   function showToast(msg){
     setToast(msg);clearTimeout(timer.current)
     timer.current=setTimeout(()=>setToast(''),2800)
   }
 
+  if (!user) return <LoginScreen onLogin={handleLogin} />
+
+  const isAdmin = user.role === 'admin'
+
   const tabs=[
     {id:'dashboard',label:'Fields',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>},
-    {id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>},
+    ...(isAdmin ? [{id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>}] : []),
     {id:'gdu',label:'GDU',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>},
     {id:'rain',label:'Rain',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg>},
     {id:'photos',label:'Photos',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>},
@@ -840,13 +1063,14 @@ export default function App() {
         <div style={{width:38,height:38,borderRadius:8,background:'#fff',padding:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
           <svg viewBox="0 0 100 100" width="30" height="30"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
         </div>
-        <div><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>Round Prairie Field Tracker</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>Pioneer® Hybrid Showcase</div></div>
+        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>Round Prairie Field Tracker</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isAdmin ? '🔑 Admin' : user.opName}</div></div>
+        <button onClick={handleLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Sign out</button>
       </div>
       <nav style={s.nav}>
         {tabs.map(t=><button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
       </nav>
-      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={loadFields} />}
-      {tab==='entry'    &&<EntryTab onSaved={loadFields} showToast={showToast} />}
+      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} />}
+      {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} />}
       {tab==='gdu'      &&<GduTab fields={fields} showToast={showToast} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
