@@ -93,7 +93,7 @@ function RainMiniLog({ fieldId }) {
   )
 }
 
-function FieldDetail({ field, onBack }) {
+function FieldDetail({ field, onBack, onDeleted }) {
   const [stats, setStats] = useState({ gdu:0, rain:0, photos:[], pins:[] })
   const [lightbox, setLightbox] = useState(null)
   const emoji = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
@@ -118,14 +118,35 @@ function FieldDetail({ field, onBack }) {
 
   return (
     <div style={s.view}>
-      <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'var(--g)',fontSize:14,fontWeight:600,marginBottom:12,cursor:'pointer',padding:0}}>
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        All fields
-      </button>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+        <button onClick={onBack} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'var(--g)',fontSize:14,fontWeight:600,cursor:'pointer',padding:0}}>
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          All fields
+        </button>
+        <button onClick={async()=>{
+          if(!window.confirm('Delete this field and ALL its data? This cannot be undone.'))return
+          await Promise.all([
+            supabase.from('gdu_log').delete().eq('field_id',field.id),
+            supabase.from('rain_log').delete().eq('field_id',field.id),
+            supabase.from('photos').delete().eq('field_id',field.id),
+            supabase.from('scout_pins').delete().eq('field_id',field.id),
+          ])
+          await supabase.from('fields').delete().eq('id',field.id)
+          onBack()
+          onDeleted()
+        }} style={{display:'flex',alignItems:'center',gap:5,background:'none',border:'1px solid #f5c6c6',borderRadius:8,padding:'6px 10px',color:'#c0392b',fontSize:13,fontWeight:500,cursor:'pointer'}}>
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          Delete field
+        </button>
+      </div>
       <div style={{background:'var(--g)',borderRadius:16,padding:16,marginBottom:12,color:'#fff'}}>
         <div style={{fontSize:20,fontWeight:700}}>{field.op}</div>
         <div style={{fontSize:13,opacity:0.85,marginTop:3}}>{field.hybrid||'—'} · {field.loc||'—'}</div>
         <div style={{fontSize:12,opacity:0.7,marginTop:2}}>Planted {field.plant_date||'—'} · Zip {field.zip||'—'}</div>
+        {field.phone&&<a href={`tel:${field.phone}`} style={{display:'inline-flex',alignItems:'center',gap:6,marginTop:8,background:'rgba(255,255,255,0.2)',borderRadius:20,padding:'5px 12px',color:'#fff',fontSize:13,fontWeight:600,textDecoration:'none'}}>
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="#fff" fill="none" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.29 6.29l.95-1.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          Call {field.phone}
+        </a>}
         <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
           {[`${stats.gdu.toFixed(1)} GDU`,`${stats.rain.toFixed(2)}" rain`,`${stats.photos.length} photos`,`${stats.pins.length} pins`].map(t=>(
             <span key={t} style={{background:'rgba(255,255,255,0.2)',borderRadius:20,padding:'4px 10px',fontSize:12,fontWeight:600}}>{t}</span>
@@ -135,7 +156,7 @@ function FieldDetail({ field, onBack }) {
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Field details</span></div>
         <div style={{padding:'4px 14px 10px'}}>
-          {[['Grower',field.grower],['Rep',field.rep],['Population',field.pop?field.pop+' seeds/ac':''],['Stand emerged',field.stand_e?field.stand_e+' plants/ac':''],['Tillage',field.tillage],['Planting cond.',field.pcond],['Emergence',field.emerge],['Stand count',field.stand_count],['Fungicide',field.fplanned],['Timing',field.ftiming],['Product',field.fproduct],['Weed pre',field.weed_pre],['Notes',field.notes]].filter(([,v])=>v).map(([k,v])=>(
+          {[['Grower',field.grower],['Phone',field.phone],['Rep',field.rep],['Population',field.pop?field.pop+' seeds/ac':''],['Stand emerged',field.stand_e?field.stand_e+' plants/ac':''],['Tillage',field.tillage],['Planting cond.',field.pcond],['Emergence',field.emerge],['Stand count',field.stand_count],['Fungicide',field.fplanned],['Timing',field.ftiming],['Product',field.fproduct],['Weed pre',field.weed_pre],['Notes',field.notes]].filter(([,v])=>v).map(([k,v])=>(
             <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:13,borderBottom:'1px solid #f5f5f0'}}>
               <span style={{color:'var(--mu)'}}>{k}</span><span style={{fontWeight:500,textAlign:'right',maxWidth:'60%'}}>{v}</span>
             </div>
@@ -190,9 +211,9 @@ function FieldDetail({ field, onBack }) {
   )
 }
 
-function DashboardTab({ fields }) {
+function DashboardTab({ fields, onRefresh }) {
   const [detail, setDetail] = useState(null)
-  if (detail) return <FieldDetail field={detail} onBack={()=>setDetail(null)} />
+  if (detail) return <FieldDetail field={detail} onBack={()=>setDetail(null)} onDeleted={onRefresh} />
   if (!fields.length) return (
     <div style={s.view}>
       <div style={{...s.empty,paddingTop:60}}>
@@ -223,7 +244,7 @@ function DashboardTab({ fields }) {
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
 function EntryTab({ onSaved, showToast }) {
-  const [form, setForm] = useState({ op:'', grower:'', rep:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
+  const [form, setForm] = useState({ op:'', grower:'', rep:'', phone:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
   const [sel, setSel] = useState({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
@@ -243,7 +264,7 @@ function EntryTab({ onSaved, showToast }) {
     const body = encodeURIComponent(`Pioneer Field: ${form.op}\nHybrid: ${form.hybrid||'—'}\nLocation: ${form.loc||'—'}\nDate: ${form.plant_date}`)
     window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
     showToast('Field saved!'); onSaved()
-    setForm({ op:'', grower:'', rep:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
+    setForm({ op:'', grower:'', rep:'', phone:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
     setSel({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   }
 
@@ -258,7 +279,7 @@ function EntryTab({ onSaved, showToast }) {
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Operation info</span></div>
         <div style={s.cb}>
-          {[['op','Operation name','Farm / operation name'],['grower','Grower / contact','Name'],['rep','Representative','Rep name'],['loc','Field location','Township, section, county…'],['zip','Field zip code','5-digit zip'],['hybrid','Hybrid planted','Hybrid number']].map(([k,l,p])=>(
+          {[['op','Operation name','Farm / operation name'],['grower','Grower / contact','Name'],['phone','Contact phone number','10-digit number'],['rep','Representative','Rep name'],['loc','Field location','Township, section, county…'],['zip','Field zip code','5-digit zip'],['hybrid','Hybrid planted','Hybrid number']].map(([k,l,p])=>(
             <div key={k} style={s.fg}><label style={s.lbl}>{l}</label><input style={s.inp} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={p} inputMode={k==='zip'?'numeric':undefined} maxLength={k==='zip'?5:undefined} /></div>
           ))}
         </div>
@@ -457,6 +478,12 @@ function PhotosTab({ fields, showToast }) {
     const{error}=await supabase.from('photos').insert([{field_id:fieldId,log_date:date,note,src:preview}])
     if(error){showToast('Save failed: '+error.message);return}
     setPreview(null);setNote('');setDate(TODAY);load();showToast('Photo saved!')
+    // Auto-text the field contact
+    const fdata=fields.find(f=>f.id===fieldId)
+    if(fdata?.phone){
+      const msg=encodeURIComponent(`Field update for ${fdata.op}: New photo logged on ${date||TODAY}${note?' — '+note:''}. Check the Pioneer Field Tracker app for details.`)
+      window.open(`sms:${fdata.phone}?body=${msg}`)
+    }
   }
   return (
     <div style={s.view}>
@@ -654,6 +681,13 @@ function ScoutTab({ fields, showToast }) {
     if(!notes&&!cat){showToast('Add a category or notes');return}
     await supabase.from('scout_pins').insert([{field_id:fieldId,lat:pending.lat,lng:pending.lng,cat:cat||'Other',notes,log_date:TODAY,photo:pinPhoto}])
     setModal(false);loadPins();showToast('Pin dropped!')
+    // Auto-text the field contact
+    const fdata=fields.find(f=>f.id===fieldId)
+    if(fdata?.phone){
+      const catLabel=cat||'Other'
+      const msg=encodeURIComponent(`Field update for ${fdata.op}: New scout pin dropped (${catLabel})${notes?' — '+notes:''}. Check the Pioneer Field Tracker app for details.`)
+      window.open(`sms:${fdata.phone}?body=${msg}`)
+    }
   }
 
   const cats=['Disease','Weed','Pest','Nutrient','Water','Other']
@@ -811,7 +845,7 @@ export default function App() {
       <nav style={s.nav}>
         {tabs.map(t=><button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
       </nav>
-      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} />}
+      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={loadFields} />}
       {tab==='entry'    &&<EntryTab onSaved={loadFields} showToast={showToast} />}
       {tab==='gdu'      &&<GduTab fields={fields} showToast={showToast} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
