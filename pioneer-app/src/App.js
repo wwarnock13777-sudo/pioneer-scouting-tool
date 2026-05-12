@@ -630,7 +630,10 @@ function PhotosTab({ fields, showToast }) {
     if(fdata){
       const contacts = getContacts(fdata)
       const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. Check the Pioneer Field Tracker app for details.`)
-      contacts.forEach((c,i)=>{ setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), i*1200) })
+      if(contacts.length>0){
+        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
+        window.location.href=`sms:${nums}?body=${msg}`
+      }
     }
   }
   return (
@@ -886,7 +889,10 @@ function ScoutTab({ fields, showToast }) {
       const contacts = getContacts(fdata)
       const catLabel=cat||'Other'
       const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. Check the Pioneer Field Tracker app for details.`)
-      contacts.forEach((c,i)=>{ setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), i*1200) })
+      if(contacts.length>0){
+        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
+        window.location.href=`sms:${nums}?body=${msg}`
+      }
     }
   }
 
@@ -1064,7 +1070,10 @@ function VisitNotesTab({ fields, showToast }) {
     if (selectedField) {
       const contacts = getContacts(selectedField)
       const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()}`)
-      contacts.forEach((c,i) => { setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), 1500 + i*1200) })
+      if(contacts.length>0){
+        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
+        setTimeout(()=>{ window.location.href=`sms:${nums}?body=${msg}` }, 1000)
+      }
     }
 
     loadNotes()
