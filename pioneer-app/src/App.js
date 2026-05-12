@@ -947,12 +947,12 @@ function VisitNotesTab({ fields, showToast }) {
     setSaving(false)
     if (error) { showToast('Save failed: ' + error.message); return }
 
-    // Text via your number
+    // Prepare text - must be triggered by direct user tap on iPhone
     if (selectedField) {
       const contacts = getContacts(selectedField)
       if(contacts.length > 0){
         const msg=encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${savedNote} — View in app: https://pioneer-scouting-tool.vercel.app`)
-        setTimeout(()=>{ window.location.href=`sms:7656693258?body=${msg}` }, 500)
+        setSmsData(`sms:7656693258?body=${msg}`)
       }
     }
   }
@@ -1004,11 +1004,24 @@ function VisitNotesTab({ fields, showToast }) {
                 <label style={s.lbl}>Notes</label>
                 <textarea style={{...s.ta, minHeight:140}} rows="6" value={note} onChange={e => setNote(e.target.value)} placeholder="What did you see? Crop stage, issues, recommendations, next steps…" />
               </div>
-              <button style={s.btn} onClick={saveNote} disabled={saving}>
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                {saving ? 'Saving…' : 'Save & send note'}
-              </button>
-              {selectedField && getContacts(selectedField).length > 0 && <div style={{fontSize:12,color:'var(--mu)',textAlign:'center',marginTop:-4}}>Will text contacts from 765-669-3258</div>}
+              {(() => {
+                const hasContacts = selectedField && getContacts(selectedField).length > 0
+                const msgText = selectedField ? `Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app` : ''
+                const smsHref = hasContacts ? `sms:7656693258?body=${encodeURIComponent(msgText)}` : null
+                return smsHref ? (
+                  <a href={smsHref} onClick={()=>{ if(note.trim()) saveNote() }}
+                    style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'var(--g)',color:'#fff',borderRadius:12,padding:15,fontSize:15,fontWeight:600,textDecoration:'none',opacity:saving?0.6:1}}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    {saving ? 'Saving…' : 'Save & send note'}
+                  </a>
+                ) : (
+                  <button style={s.btn} onClick={saveNote} disabled={saving}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    {saving ? 'Saving…' : 'Save note'}
+                  </button>
+                )
+              })()}
+              {selectedField && getContacts(selectedField).length > 0 && <div style={{fontSize:12,color:'var(--mu)',textAlign:'center',marginTop:-4}}>Opens Messages — tap Send to deliver</div>}
             </div>
           </div>
 
