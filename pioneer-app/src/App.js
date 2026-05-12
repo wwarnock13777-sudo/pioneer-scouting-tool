@@ -482,7 +482,7 @@ function EntryTab({ onSaved, showToast }) {
           {/* Field location — drop pin on map */}
           <div style={s.fg}>
             <label style={s.lbl}>Field location</label>
-            <button type="button" onClick={()=>setShowLocMap(true); setMapReady(false); setTimeout(()=>setMapReady(true), 150)} style={{...s.inp, textAlign:'left', cursor:'pointer', color: form.loc_lat ? 'var(--tx)' : 'var(--hi)', display:'flex', alignItems:'center', gap:8, background: form.loc_lat ? 'var(--gl)' : '#f8f8f5', border: form.loc_lat ? '1px solid var(--g)' : '1px solid var(--bdr)'}}>
+            <button type="button" onClick={()=>{ setShowLocMap(true); setMapReady(false); setTimeout(()=>setMapReady(true), 150) }} style={{...s.inp, textAlign:'left', cursor:'pointer', color: form.loc_lat ? 'var(--tx)' : 'var(--hi)', display:'flex', alignItems:'center', gap:8, background: form.loc_lat ? 'var(--gl)' : '#f8f8f5', border: form.loc_lat ? '1px solid var(--g)' : '1px solid var(--bdr)'}}>
               <svg viewBox="0 0 24 24" width="16" height="16" stroke={form.loc_lat?'var(--g)':'var(--hi)'} fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               {form.loc_lat ? `📍 ${Number(form.loc_lat).toFixed(5)}, ${Number(form.loc_lng).toFixed(5)}` : 'Tap to drop pin on map'}
             </button>
