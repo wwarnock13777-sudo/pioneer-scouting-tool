@@ -496,7 +496,7 @@ function LocMapPicker({ onPick, initLat, initLng }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
-function EntryTab({ onSaved, showToast, repName }) {
+function EntryTab({ onSaved, showToast }) {
   const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', acres:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
   const [showLocMap, setShowLocMap] = useState(false)
   const [mapReady, setMapReady] = useState(false)
@@ -514,7 +514,7 @@ function EntryTab({ onSaved, showToast, repName }) {
     setSaving(true)
     const tillage = sel.tillage==='Other'?(form.tillage_other||'Other'):sel.tillage
     const ftiming = sel.ftiming==='Other'?(form.ftiming_other||'Other'):sel.ftiming
-    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, rep_name: repName||'Will', saved_at:new Date().toLocaleDateString(),
+    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, saved_at:new Date().toLocaleDateString(),
       contacts: JSON.stringify(form.contacts.filter(c=>c.phone.trim())),
       grower: form.contacts[0]?.name || '',
       phone: form.contacts[0]?.phone || '',
@@ -1688,98 +1688,52 @@ function ReportsTab({ fields, showToast, isAdmin, userOpName }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // LOGIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
-const WILL_PIN = '0726'
-const WILL_REP = 'will'
+const ADMIN_PIN = '0726'
 
 function LoginScreen({ onLogin }) {
   const [step, setStep] = useState(1)
-  const [name, setName] = useState('')
+  const [opName, setOpName] = useState('')
   const [pin, setPin] = useState('')
-  const [confirmPin, setConfirmPin] = useState('')
-  const [mode, setMode] = useState(null) // 'rep' | 'customer'
   const [isNew, setIsNew] = useState(false)
+  const [confirmPin, setConfirmPin] = useState('')
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
 
-  async function handleNameSubmit() {
-    const val = name.trim().toLowerCase()
-    if (!val) { setError('Enter your name'); return }
+  async function handleOpSubmit() {
+    const val = opName.trim()
+    if (!val) { setError('Enter your operation name'); return }
     setError('')
-
-    // Will = hardcoded rep admin
-    if (val === WILL_REP) {
-      setMode('rep'); setIsNew(false); setStep(2); return
-    }
-
+    if (val.toLowerCase() === 'admin') { setIsNew(false); setStep(2); return }
     setChecking(true)
-    // Check rep_pins first
-    const { data: repData } = await supabase.from('rep_pins').select('pin').eq('rep_name', val).maybeSingle()
-    if (repData) {
-      setMode('rep'); setIsNew(false); setChecking(false); setStep(2); return
-    }
-    // Check if this looks like a rep signup attempt (will handle below)
-    // Check customer pins
-    const { data: custData } = await supabase.from('user_pins').select('pin').eq('op_name', val).maybeSingle()
+    const { data } = await supabase.from('user_pins').select('pin').eq('op_name', val.toLowerCase()).maybeSingle()
     setChecking(false)
-
-    if (custData) {
-      setMode('customer'); setIsNew(false); setStep(2)
-    } else {
-      // New user - ask if rep or customer
-      setMode(null); setStep('choose')
-    }
+    setIsNew(!data)
+    setStep(2)
   }
 
   async function handlePinSubmit() {
     setError('')
-    const val = name.trim().toLowerCase()
-
-    if (mode === 'rep') {
-      // Will's hardcoded PIN
-      if (val === WILL_REP) {
-        if (pin === WILL_PIN) {
-          onLogin({ role:'rep', repName:'Will', opName:'Will' })
-        } else { setError('Incorrect PIN'); setPin('') }
-        return
-      }
-      // Other rep
-      if (isNew) {
-        if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
-        if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
-        const { error: e } = await supabase.from('rep_pins').insert([{ rep_name: val, pin }])
-        if (e) { setError('Error: ' + e.message); return }
-        onLogin({ role:'rep', repName: name.trim(), opName: name.trim() })
-      } else {
-        const { data } = await supabase.from('rep_pins').select('pin').eq('rep_name', val).maybeSingle()
-        if (data && data.pin === pin) {
-          onLogin({ role:'rep', repName: name.trim(), opName: name.trim() })
-        } else { setError('Incorrect PIN'); setPin('') }
-      }
+    if (opName.trim().toLowerCase() === 'admin') {
+      if (pin === ADMIN_PIN) { onLogin({ role:'admin', opName:'Admin' }) }
+      else { setError('Incorrect PIN'); setPin('') }
       return
     }
-
-    if (mode === 'customer') {
-      if (isNew) {
-        if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
-        if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
-        const { error: e } = await supabase.from('user_pins').insert([{ op_name: val, pin }])
-        if (e) { setError('Error: ' + e.message); return }
-        onLogin({ role:'customer', opName: name.trim() })
-      } else {
-        const { data } = await supabase.from('user_pins').select('pin').eq('op_name', val).maybeSingle()
-        if (data && data.pin === pin) {
-          onLogin({ role:'customer', opName: name.trim() })
-        } else { setError('Incorrect PIN'); setPin('') }
-      }
+    if (isNew) {
+      if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
+      if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
+      const { error: e } = await supabase.from('user_pins').insert([{ op_name: opName.trim().toLowerCase(), pin }])
+      if (e) { setError('Error: ' + e.message); return }
+      onLogin({ role:'customer', opName: opName.trim() })
+    } else {
+      const { data } = await supabase.from('user_pins').select('pin').eq('op_name', opName.trim().toLowerCase()).maybeSingle()
+      if (data && data.pin === pin) { onLogin({ role:'customer', opName: opName.trim() }) }
+      else { setError('Incorrect PIN'); setPin('') }
     }
   }
 
   const handleNum = (n) => {
-    if (isNew && pin.length === 4) {
-      setConfirmPin(c => c.length < 4 ? c + n : c)
-    } else {
-      setPin(p => p.length < 4 ? p + n : p)
-    }
+    if (isNew && pin.length === 4) setConfirmPin(c => c.length < 4 ? c + n : c)
+    else setPin(p => p.length < 4 ? p + n : p)
   }
   const handleBack = () => {
     if (isNew && pin.length === 4) setConfirmPin(c => c.slice(0,-1))
@@ -1791,7 +1745,6 @@ function LoginScreen({ onLogin }) {
     borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center',
     fontSize:28, fontWeight:700, color:'var(--tx)', background: filled?'var(--gl)':'#f8f8f5'
   })
-
   const nums = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 
   return (
@@ -1803,54 +1756,32 @@ function LoginScreen({ onLogin }) {
         <div style={{ fontSize:22, fontWeight:700, color:'var(--tx)' }}>W² Scouting Tool</div>
       </div>
 
-      {/* Step 1 — Name */}
       {step === 1 && (
         <div style={{ width:'100%', maxWidth:340 }}>
-          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your name</div>
-          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Operation name or rep name</div>
+          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your operation name</div>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Enter your operation name to continue</div>
           <input style={{ ...s.inp, fontSize:17, padding:'14px', marginBottom:12, textAlign:'center' }}
-            value={name} onChange={e=>setName(e.target.value)} placeholder="Name"
-            onKeyDown={e=>e.key==='Enter'&&handleNameSubmit()} autoFocus />
+            value={opName} onChange={e=>setOpName(e.target.value)}
+            placeholder="Operation name" onKeyDown={e=>e.key==='Enter'&&handleOpSubmit()} autoFocus />
           {error && <div style={{ color:'#c0392b', fontSize:13, textAlign:'center', marginBottom:10 }}>{error}</div>}
-          <button style={s.btn} onClick={handleNameSubmit} disabled={checking}>{checking?'Checking…':'Continue →'}</button>
+          <button style={s.btn} onClick={handleOpSubmit} disabled={checking}>{checking?'Checking…':'Continue →'}</button>
         </div>
       )}
 
-      {/* Step choose — new user picks rep or customer */}
-      {step === 'choose' && (
-        <div style={{ width:'100%', maxWidth:340 }}>
-          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Welcome, {name}!</div>
-          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>How are you using this app?</div>
-          <button style={{...s.btn, marginBottom:10}} onClick={()=>{ setMode('rep'); setIsNew(true); setStep(2) }}>
-            🌾 I'm a crop consultant / rep
-          </button>
-          <button style={{...s.btnOut}} onClick={()=>{ setMode('customer'); setIsNew(true); setStep(2) }}>
-            🏡 I'm a grower / farmer
-          </button>
-          <button onClick={()=>setStep(1)} style={{background:'none',border:'none',color:'var(--mu)',fontSize:13,cursor:'pointer',marginTop:14,display:'block',margin:'14px auto 0'}}>← Back</button>
-        </div>
-      )}
-
-      {/* Step 2 — PIN */}
       {step === 2 && (
         <div style={{ width:'100%', maxWidth:340, textAlign:'center' }}>
           <button onClick={()=>{setStep(1);setPin('');setConfirmPin('');setError('')}} style={{background:'none',border:'none',color:'var(--mu)',fontSize:13,cursor:'pointer',marginBottom:16,display:'flex',alignItems:'center',gap:4,margin:'0 auto 16px'}}>
             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>Back
           </button>
-          <div style={{fontSize:13,color:'var(--mu)',marginBottom:4}}>{name} · {mode==='rep'?'Rep':'Grower'}</div>
+          <div style={{fontSize:13,color:'var(--mu)',marginBottom:4}}>{opName}</div>
           {isNew ? (
             <>
-              <div style={{fontSize:16,fontWeight:600,color:'var(--tx)',marginBottom:4}}>
-                {pin.length < 4 ? 'Create your 4-digit PIN' : 'Confirm your PIN'}
-              </div>
-              <div style={{fontSize:13,color:'var(--mu)',marginBottom:20}}>
-                {pin.length < 4 ? "You'll use this every time you log in" : 'Enter your PIN again'}
-              </div>
+              <div style={{fontSize:16,fontWeight:600,color:'var(--tx)',marginBottom:4}}>{pin.length<4?'Create your 4-digit PIN':'Confirm your PIN'}</div>
+              <div style={{fontSize:13,color:'var(--mu)',marginBottom:20}}>{pin.length<4?"You'll use this to log in next time":'Enter your PIN again to confirm'}</div>
             </>
           ) : (
             <div style={{fontSize:16,fontWeight:600,color:'var(--tx)',marginBottom:20}}>Enter your PIN</div>
           )}
-
           <div style={{display:'flex',gap:12,justifyContent:'center',marginBottom:8}}>
             {[0,1,2,3].map(i=>(
               <div key={i} style={pinBoxStyle(isNew?(pin.length<4?i<pin.length:i<confirmPin.length):i<pin.length)}>
@@ -1860,7 +1791,6 @@ function LoginScreen({ onLogin }) {
           </div>
           {isNew&&pin.length===4&&<div style={{fontSize:11,color:'var(--g)',fontWeight:600,marginBottom:8,letterSpacing:'0.04em',textTransform:'uppercase'}}>Confirming PIN</div>}
           {error&&<div style={{color:'#c0392b',fontSize:13,marginBottom:12}}>{error}</div>}
-
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,maxWidth:260,margin:'16px auto 0'}}>
             {nums.map((n,i)=>{
               if(n==='') return <div key={i}/>
@@ -1868,11 +1798,8 @@ function LoginScreen({ onLogin }) {
               return <button key={i} onClick={()=>handleNum(n)} style={{width:72,height:72,borderRadius:36,background:'#f8f8f5',border:'1px solid var(--bdr)',fontSize:22,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}>{n}</button>
             })}
           </div>
-
           {((isNew&&pin.length===4&&confirmPin.length===4)||(!isNew&&pin.length===4))&&(
-            <button style={{...s.btn,marginTop:20}} onClick={handlePinSubmit}>
-              {isNew?'Create PIN & Sign in':'Sign in'}
-            </button>
+            <button style={{...s.btn,marginTop:20}} onClick={handlePinSubmit}>{isNew?'Create PIN & Sign in':'Sign in'}</button>
           )}
         </div>
       )}
@@ -1906,9 +1833,6 @@ export default function App() {
     let query = supabase.from('fields').select('*').order('created_at',{ascending:false})
     if (activeUser.role === 'customer') {
       query = query.ilike('op', activeUser.opName)
-    } else if (activeUser.role === 'rep') {
-      // Rep sees only their own fields
-      query = query.eq('rep_name', activeUser.repName || activeUser.opName)
     }
     const{data}=await query
     setFields(data||[])
@@ -1934,8 +1858,7 @@ export default function App() {
 
   if (!user) return <LoginScreen onLogin={handleLogin} />
 
-  const isRep = user.role === 'rep'
-  const isAdmin = isRep // reps have admin privileges
+  const isAdmin = user.role === 'admin'
 
   const tabs=[
     {id:'dashboard',label:'Fields',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>},
@@ -1956,14 +1879,14 @@ export default function App() {
         <div style={{width:38,height:38,borderRadius:8,background:'#fff',padding:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
           <svg viewBox="0 0 100 100" width="30" height="30"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
         </div>
-        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>W² Scouting Tool</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isRep ? `🌾 ${user.repName||user.opName}` : user.opName}</div></div>
+        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>W² Scouting Tool</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isAdmin ? '🔑 Admin' : user.opName}</div></div>
         <button onClick={handleLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Sign out</button>
       </div>
       <nav style={s.nav}>
         {tabs.map(t=><button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
       </nav>
       {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} userOpName={user?.opName} />}
-      {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} repName={user?.repName||user?.opName} />}
+      {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
       {tab==='scout'    &&<ScoutTab fields={fields} showToast={showToast} />}
