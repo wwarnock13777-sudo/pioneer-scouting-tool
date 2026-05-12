@@ -1130,34 +1130,76 @@ function VisitNotesTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// MINI SCOUT MAP — shown inside field detail on dashboard
+// MINI SCOUT MAP — tap a pin to see it zoomed in on satellite map
 // ══════════════════════════════════════════════════════════════════════════════
 function MiniScoutMap({ pins }) {
   const mapRef = useRef(null)
   const mapObj = useRef(null)
+  const markerRefs = useRef([])
+  const [activePin, setActivePin] = useState(null)
+  const em = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
 
   useEffect(() => {
     if (!pins.length) return
     const L = window.L
     if (!mapObj.current) {
-      mapObj.current = L.map(mapRef.current, { zoomControl:false, dragging:true, scrollWheelZoom:false })
+      mapObj.current = L.map(mapRef.current, { zoomControl:false, dragging:true, scrollWheelZoom:false, tapTolerance:15 })
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 }).addTo(mapObj.current)
     }
-    const em = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
-    const markerList = []
+    // Clear old markers
+    markerRefs.current.forEach(m => mapObj.current.removeLayer(m))
+    markerRefs.current = []
+
+    // Add all pins as small dots
     pins.forEach(p => {
-      const icon = L.divIcon({ html:`<div style="font-size:22px;line-height:1">${em[p.cat]||'📍'}</div>`, className:'', iconSize:[26,26], iconAnchor:[13,26] })
+      const icon = L.divIcon({ html:`<div style="width:10px;height:10px;background:#fff;border:2px solid var(--g);border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`, className:'', iconSize:[10,10], iconAnchor:[5,5] })
       const m = L.marker([p.lat, p.lng], { icon }).addTo(mapObj.current)
-      m.bindPopup(`<div style="padding:6px;font-size:13px"><strong>${p.cat||'Pin'}</strong><br/>${p.log_date}<br/>${p.notes||''}</div>`)
-      markerList.push(m)
+      markerRefs.current.push(m)
     })
-    const group = L.featureGroup(markerList)
-    mapObj.current.fitBounds(group.getBounds(), { padding:[30,30] })
+
+    // Start zoomed to show all pins
+    if (pins.length === 1) {
+      mapObj.current.setView([pins[0].lat, pins[0].lng], 17)
+    } else {
+      const group = L.featureGroup(markerRefs.current)
+      mapObj.current.fitBounds(group.getBounds(), { padding:[30,30] })
+    }
   }, [pins])
+
+  // When a pin is selected, fly to it and show big marker
+  useEffect(() => {
+    if (!mapObj.current || !activePin) return
+    const L = window.L
+    mapObj.current.flyTo([activePin.lat, activePin.lng], 18, { duration:0.8 })
+  }, [activePin])
 
   if (!pins.length) return <div style={{...s.empty,padding:12}}>No pins dropped yet</div>
 
-  return <div ref={mapRef} style={{width:'100%',height:220,borderRadius:'0 0 10px 10px'}} />
+  return (
+    <div>
+      <div ref={mapRef} style={{width:'100%',height:200}} />
+      {/* Pin selector row */}
+      <div style={{display:'flex',gap:6,overflowX:'auto',padding:'10px 14px',background:'#f8f8f5',borderTop:'1px solid var(--bdr)',WebkitOverflowScrolling:'touch'}}>
+        {pins.map(p => (
+          <button key={p.id} onClick={()=>setActivePin(activePin?.id===p.id?null:p)}
+            style={{flexShrink:0,border:activePin?.id===p.id?'2px solid var(--g)':'1px solid var(--bdr)',borderRadius:20,padding:'5px 12px',background:activePin?.id===p.id?'var(--gl)':'#fff',cursor:'pointer',fontSize:12,fontWeight:500,display:'flex',alignItems:'center',gap:5,color:activePin?.id===p.id?'var(--gd)':'var(--tx)'}}>
+            <span>{em[p.cat]||'📍'}</span>
+            <span>{p.cat||'Pin'}</span>
+            <span style={{color:'var(--mu)',fontSize:11}}>{p.log_date}</span>
+          </button>
+        ))}
+      </div>
+      {/* Active pin detail */}
+      {activePin && (
+        <div style={{padding:'10px 14px',background:'var(--gl)',borderTop:'1px solid rgba(45,122,45,0.2)'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--gd)',marginBottom:3}}>{em[activePin.cat]||'📍'} {activePin.cat} · {activePin.log_date}</div>
+          {activePin.notes && <div style={{fontSize:13,color:'var(--tx)'}}>{activePin.notes}</div>}
+          <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>{Number(activePin.lat).toFixed(5)}, {Number(activePin.lng).toFixed(5)}</div>
+          {activePin.photo && <img src={activePin.photo} alt="pin" style={{width:'100%',borderRadius:8,marginTop:8,maxHeight:120,objectFit:'cover'}} />}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
