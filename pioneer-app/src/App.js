@@ -93,7 +93,7 @@ function RainMiniLog({ fieldId }) {
   )
 }
 
-function FieldDetail({ field, onBack, onDeleted }) {
+function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
   const [stats, setStats] = useState({ gdu:0, rain:0, photos:[], pins:[] })
   const [lightbox, setLightbox] = useState(null)
   const emoji = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
@@ -130,6 +130,7 @@ function FieldDetail({ field, onBack, onDeleted }) {
             supabase.from('rain_log').delete().eq('field_id',field.id),
             supabase.from('photos').delete().eq('field_id',field.id),
             supabase.from('scout_pins').delete().eq('field_id',field.id),
+            supabase.from('visit_notes').delete().eq('field_id',field.id),
           ])
           await supabase.from('fields').delete().eq('id',field.id)
           onBack()
@@ -212,11 +213,11 @@ function FieldDetail({ field, onBack, onDeleted }) {
   )
 }
 
-function DashboardTab({ fields, onRefresh, isAdmin }) {
+function DashboardTab({ fields, onRefresh, isAdmin, userOpName }) {
   const [detail, setDetail] = useState(null)
   const [expandedFarms, setExpandedFarms] = useState({})
 
-  if (detail) return <FieldDetail field={detail} onBack={()=>setDetail(null)} onDeleted={onRefresh} />
+  if (detail) return <FieldDetail field={detail} onBack={()=>setDetail(null)} onDeleted={onRefresh} isAdmin={isAdmin} userOpName={userOpName} />
 
   if (!fields.length) return (
     <div style={s.view}>
@@ -1466,7 +1467,7 @@ export default function App() {
       <nav style={s.nav}>
         {tabs.map(t=><button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
       </nav>
-      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} />}
+      {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} userOpName={user?.opName} />}
       {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} />}
       {tab==='gdu'      &&<GduTab fields={fields} showToast={showToast} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
