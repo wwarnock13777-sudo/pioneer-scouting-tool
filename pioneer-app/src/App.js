@@ -191,6 +191,7 @@ function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
                 <div style={{fontSize:13,fontWeight:600}}>{p.cat||'Pin'} <span style={{color:'var(--mu)',fontWeight:400,fontSize:12}}>· {p.log_date}</span></div>
                 {p.notes && <div style={{fontSize:13,marginTop:3}}>{p.notes}</div>}
                 <div style={{fontSize:11,color:'var(--hi)',marginTop:3}}>{Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)}</div>
+                <a href={`https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d`} style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,background:'#007aff',color:'#fff',padding:'5px 10px',borderRadius:8,fontSize:12,fontWeight:600,textDecoration:'none'}}>🗺 Directions</a>
                 {p.photo && <img src={p.photo} alt="pin" style={{width:'100%',borderRadius:8,marginTop:6,maxHeight:130,objectFit:'cover'}} />}
               </div>
             </div>
@@ -776,7 +777,8 @@ function ScoutTab({ fields, showToast }) {
     pins.forEach(p=>{
       const icon=L.divIcon({html:`<div style="font-size:24px;line-height:1">${em[p.cat]||'📍'}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,28]})
       const m=L.marker([p.lat,p.lng],{icon}).addTo(mapObj.current)
-      m.bindPopup(`<div style="min-width:160px;padding:8px"><strong>${p.cat||'Pin'}</strong><br/><small>${p.log_date}</small><p style="margin-top:4px;font-size:13px">${p.notes||''}</p>${p.photo?`<img src="${p.photo}" style="width:100%;border-radius:6px;margin-top:6px;max-height:100px;object-fit:cover">`:''}`,{maxWidth:220})
+      m.bindPopup(`<div style="min-width:180px;padding:8px"><strong>${p.cat||'Pin'}</strong><br/><small>${p.log_date}</small><p style="margin-top:4px;font-size:13px">${p.notes||''}</p>${p.photo?`<img src="${p.photo}" style="width:100%;border-radius:6px;margin-top:6px;max-height:100px;object-fit:cover">`:''}
+<a href="https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d" target="_blank" style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:#007aff;color:#fff;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">🗺 Directions</a></div>`,{maxWidth:220})
       markers.current.push(m)
     })
   }
@@ -970,6 +972,7 @@ function ScoutTab({ fields, showToast }) {
                 <div style={{fontSize:14,fontWeight:600}}>{em[p.cat]||'📍'} {p.cat||'Pin'}</div>
                 <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{p.log_date} · {Number(p.lat).toFixed(4)}, {Number(p.lng).toFixed(4)}</div>
                 <div style={{fontSize:13,marginTop:3}}>{p.notes}</div>
+                <a href={`https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d`} style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,background:'#007aff',color:'#fff',padding:'5px 10px',borderRadius:8,fontSize:12,fontWeight:600,textDecoration:'none'}}>🗺 Directions</a>
               </div>
               <DelBtn onClick={async()=>{if(!window.confirm('Delete?'))return;await supabase.from('scout_pins').delete().eq('id',p.id);loadPins()}} />
             </div>
@@ -1232,6 +1235,7 @@ function MiniScoutMap({ pins }) {
           <div style={{fontSize:13,fontWeight:600,color:'var(--gd)',marginBottom:3}}>{em[activePin.cat]||'📍'} {activePin.cat} · {activePin.log_date}</div>
           {activePin.notes && <div style={{fontSize:13,color:'var(--tx)'}}>{activePin.notes}</div>}
           <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>{Number(activePin.lat).toFixed(5)}, {Number(activePin.lng).toFixed(5)}</div>
+          <a href={`https://maps.apple.com/?daddr=${activePin.lat},${activePin.lng}&dirflg=d`} style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:8,background:'#007aff',color:'#fff',padding:'6px 12px',borderRadius:8,fontSize:13,fontWeight:600,textDecoration:'none'}}>🗺 Get directions</a>
           {activePin.photo && <img src={activePin.photo} alt="pin" style={{width:'100%',borderRadius:8,marginTop:8,maxHeight:120,objectFit:'cover'}} />}
         </div>
       )}
