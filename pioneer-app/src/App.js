@@ -438,12 +438,18 @@ function getContacts(field) {
     if (field.contacts) {
       const c = typeof field.contacts === 'string' ? JSON.parse(field.contacts) : field.contacts
       const valid = (Array.isArray(c) ? c : []).filter(x => x && x.phone && x.phone.trim())
+      console.log('getContacts from JSON:', valid)
       if (valid.length > 0) return valid
     }
     // Fall back to legacy phone field
-    if (field.phone && field.phone.trim()) return [{name: field.grower||'', phone: field.phone.trim()}]
+    if (field.phone && field.phone.trim()) {
+      console.log('getContacts from phone field:', field.phone)
+      return [{name: field.grower||'', phone: field.phone.trim()}]
+    }
+    console.log('getContacts: no contacts found', field)
     return []
   } catch(e) {
+    console.log('getContacts error:', e)
     if (field.phone && field.phone.trim()) return [{name:'', phone:field.phone.trim()}]
     return []
   }
@@ -722,6 +728,7 @@ function PhotosTab({ fields, showToast }) {
       if(contacts.length>0){
         const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
         const nums = contacts.map(c=>c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
+        console.log('SMS to:', nums)
         window.location.href=`sms:${nums}?body=${msg}`
       }
     }
@@ -1972,3 +1979,4 @@ export default function App() {
     </>
   )
 }
+        
