@@ -1126,6 +1126,407 @@ function MiniScoutMap({ pins }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// YIELD TAB
+// ══════════════════════════════════════════════════════════════════════════════
+function YieldTab({ fields, showToast }) {
+  const [selectedFarm, setSelectedFarm] = useState('')
+  const [selectedFieldId, setSelectedFieldId] = useState('')
+  const [yieldBuAc, setYieldBuAc] = useState('')
+  const [harvestDate, setHarvestDate] = useState(TODAY)
+  const [yieldNotes, setYieldNotes] = useState('')
+  const [yields, setYields] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  const farms = [...new Set(fields.map(f => f.op))].sort()
+  const farmFields = fields.filter(f => f.op === selectedFarm)
+  const selectedField = fields.find(f => f.id === selectedFieldId)
+
+  useEffect(() => { setSelectedFieldId('') }, [selectedFarm])
+  useEffect(() => { if (selectedFieldId) loadYields() }, [selectedFieldId])
+
+  async function loadYields() {
+    const { data } = await supabase.from('yield_log').select('*').eq('field_id', selectedFieldId).order('harvest_date', { ascending: false })
+    setYields(data || [])
+  }
+
+  async function saveYield() {
+    if (!yieldBuAc) { showToast('Enter yield bu/ac'); return }
+    if (!selectedFieldId) { showToast('Select a field first'); return }
+    setSaving(true)
+    const { error } = await supabase.from('yield_log').insert([{
+      field_id: selectedFieldId,
+      harvest_date: harvestDate,
+      yield_buac: parseFloat(yieldBuAc),
+      notes: yieldNotes,
+    }])
+    setSaving(false)
+    if (error) { showToast('Save failed: ' + error.message); return }
+    setYieldBuAc(''); setYieldNotes(''); setHarvestDate(TODAY)
+    loadYields(); showToast('Yield saved!')
+  }
+
+  return (
+    <div style={s.view}>
+      <div style={s.fg}>
+        <label style={s.lbl}>Farm / Operation</label>
+        <select style={s.fsel} value={selectedFarm} onChange={e => setSelectedFarm(e.target.value)}>
+          <option value="">— Select a farm —</option>
+          {farms.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
+      {selectedFarm && (
+        <div style={{...s.fg, marginBottom:12}}>
+          <label style={s.lbl}>Field</label>
+          <select style={s.fsel} value={selectedFieldId} onChange={e => setSelectedFieldId(e.target.value)}>
+            <option value="">— Select a field —</option>
+            {farmFields.map(f => <option key={f.id} value={f.id}>{f.field_name||f.hybrid||f.loc||f.id}</option>)}
+          </select>
+        </div>
+      )}
+      {selectedFieldId && (
+        <>
+          <div style={{ background:'var(--g)', borderRadius:10, padding:'10px 14px', marginBottom:12, color:'#fff', fontSize:13 }}>
+            <span style={{fontWeight:600}}>{selectedField?.op}</span>
+            {selectedField?.field_name && <span style={{opacity:0.85}}> · {selectedField.field_name}</span>}
+            {selectedField?.hybrid && <span style={{opacity:0.7}}> · {selectedField.hybrid}</span>}
+          </div>
+          <div style={s.card}>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Enter yield</span></div>
+            <div style={s.cb}>
+              <div style={s.fg}><label style={s.lbl}>Yield (bu/ac)</label><input style={s.inp} type="number" step="0.1" value={yieldBuAc} onChange={e=>setYieldBuAc(e.target.value)} placeholder="e.g. 215.5" inputMode="decimal" /></div>
+              <div style={s.fg}><label style={s.lbl}>Harvest date</label><input style={s.inp} type="date" value={harvestDate} onChange={e=>setHarvestDate(e.target.value)} /></div>
+              <div style={s.fg}><label style={s.lbl}>Notes (optional)</label><input style={s.inp} value={yieldNotes} onChange={e=>setYieldNotes(e.target.value)} placeholder="Conditions, moisture, etc." /></div>
+              <button style={s.btn} onClick={saveYield} disabled={saving}>
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+                {saving ? 'Saving…' : 'Save yield'}
+              </button>
+            </div>
+          </div>
+          {yields.length > 0 && (
+            <div style={s.card}>
+              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Yield log</span></div>
+              <div style={{padding:'4px 14px 8px'}}>
+                {yields.map(y => (
+                  <div key={y.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--bdr)'}}>
+                    <div>
+                      <div style={{fontSize:18,fontWeight:700,color:'var(--g)'}}>{y.yield_buac} <span style={{fontSize:13,fontWeight:400,color:'var(--mu)'}}>bu/ac</span></div>
+                      <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{y.harvest_date}{y.notes?' · '+y.notes:''}</div>
+                    </div>
+                    <DelBtn onClick={async()=>{ if(!window.confirm('Delete?'))return; await supabase.from('yield_log').delete().eq('id',y.id); loadYields() }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REPORTS TAB (ADMIN ONLY)
+// ══════════════════════════════════════════════════════════════════════════════
+function ReportsTab({ fields, showToast }) {
+  const [view, setView] = useState('overview') // overview | compare | hybrid
+  const [allYields, setAllYields] = useState([])
+  const [allRain, setAllRain] = useState([])
+  const [compareA, setCompareA] = useState('')
+  const [compareB, setCompareB] = useState('')
+  const [compareDataA, setCompareDataA] = useState(null)
+  const [compareDataB, setCompareDataB] = useState(null)
+  const [selectedHybrid, setSelectedHybrid] = useState('')
+  const [anonymize, setAnonymize] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => { loadAllData() }, [fields])
+
+  async function loadAllData() {
+    if (!fields.length) return
+    setLoading(true)
+    const ids = fields.map(f => f.id)
+    const [{ data: yd }, { data: rd }] = await Promise.all([
+      supabase.from('yield_log').select('*').in('field_id', ids),
+      supabase.from('rain_log').select('*').in('field_id', ids),
+    ])
+    setAllYields(yd || [])
+    setAllRain(rd || [])
+    setLoading(false)
+  }
+
+  // Build field stats
+  const fieldStats = fields.map((f, i) => {
+    const fy = allYields.filter(y => y.field_id === f.id)
+    const fr = allRain.filter(r => r.field_id === f.id)
+    const avgYield = fy.length ? (fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1) : null
+    const totalRain = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
+    return { ...f, avgYield, totalRain: parseFloat(totalRain), yieldEntries: fy, rainEntries: fr, idx: i+1 }
+  }).filter(f => f.avgYield !== null)
+
+  const sorted = [...fieldStats].sort((a,b) => parseFloat(b.avgYield)-parseFloat(a.avgYield))
+  const maxYield = sorted.length ? parseFloat(sorted[0].avgYield) : 1
+  const maxRain = fieldStats.length ? Math.max(...fieldStats.map(f=>f.totalRain)) : 1
+
+  // Hybrid comparison data
+  const hybrids = [...new Set(fields.map(f=>f.hybrid).filter(Boolean))].sort()
+  const hybridFields = fields.filter(f => f.hybrid === selectedHybrid)
+
+  async function loadCompare(fid, setter) {
+    if (!fid) { setter(null); return }
+    const f = fields.find(x => x.id === fid)
+    const [{ data: yd },{ data: rd },{ data: gd }] = await Promise.all([
+      supabase.from('yield_log').select('*').eq('field_id', fid),
+      supabase.from('rain_log').select('amount').eq('field_id', fid),
+      supabase.from('gdu_log').select('gdu').eq('field_id', fid),
+    ])
+    setter({
+      ...f,
+      yield: yd?.length ? (yd.reduce((a,y)=>a+Number(y.yield_buac),0)/yd.length).toFixed(1) : '—',
+      rain: rd?.reduce((a,r)=>a+Number(r.amount),0).toFixed(2) || '0.00',
+      gdu: gd?.reduce((a,g)=>a+Number(g.gdu),0).toFixed(1) || '0',
+    })
+  }
+
+  useEffect(() => { loadCompare(compareA, setCompareDataA) }, [compareA])
+  useEffect(() => { loadCompare(compareB, setCompareDataB) }, [compareB])
+
+  function printReport() {
+    window.print()
+  }
+
+  const navBtns = [
+    { id:'overview', label:'Overview' },
+    { id:'compare', label:'Compare' },
+    { id:'hybrid', label:'By Hybrid' },
+  ]
+
+  const farmLabel = (f) => anonymize ? `Field ${f.idx}` : f.op
+  const fieldLabel = (f) => anonymize ? `Field ${f.idx}` : (f.field_name || f.hybrid || f.op)
+
+  return (
+    <div style={s.view}>
+      {/* Sub nav */}
+      <div style={{display:'flex',gap:6,marginBottom:14,overflowX:'auto'}}>
+        {navBtns.map(b=>(
+          <button key={b.id} onClick={()=>setView(b.id)} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'none',cursor:'pointer',background:view===b.id?'var(--g)':'#f0f0ea',color:view===b.id?'#fff':'var(--tx)'}}>{b.label}</button>
+        ))}
+        <button onClick={()=>setAnonymize(a=>!a)} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--bdr)',cursor:'pointer',background:anonymize?'#fff3e0':'#f0f0ea',color:anonymize?'#7a4500':'var(--mu)',marginLeft:'auto'}}>
+          {anonymize ? '👤 Anonymized' : '👤 Anonymize'}
+        </button>
+        <button onClick={printReport} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--g)',cursor:'pointer',background:'var(--gl)',color:'var(--gd)',display:'flex',alignItems:'center',gap:5}}>
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print / PDF
+        </button>
+      </div>
+
+      {loading && <div style={s.empty}>Loading data…</div>}
+
+      {/* ── OVERVIEW ── */}
+      {view === 'overview' && !loading && (
+        <>
+          {/* Yield chart */}
+          <div style={s.card}>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Yield — bu/ac (highest to lowest)</span></div>
+            <div style={{padding:'13px 14px'}}>
+              {sorted.length === 0 ? <div style={{...s.empty,padding:12}}>No yield data yet — add yields in the Yield tab</div> : sorted.map((f,i) => (
+                <div key={f.id} style={{marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:13,fontWeight:600}}>{i+1}. {fieldLabel(f)} {!anonymize&&f.op?<span style={{color:'var(--mu)',fontWeight:400}}>· {f.op}</span>:null}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:'var(--g)'}}>{f.avgYield} bu/ac</span>
+                  </div>
+                  <div style={{background:'#f0f0ea',borderRadius:6,height:10,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:6,background:`hsl(${120-i*15},60%,45%)`,width:`${(parseFloat(f.avgYield)/maxYield)*100}%`,transition:'width 0.5s'}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rain chart */}
+          <div style={s.card}>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Season rainfall by field</span></div>
+            <div style={{padding:'13px 14px'}}>
+              {[...fieldStats].sort((a,b)=>b.totalRain-a.totalRain).map((f,i)=>(
+                <div key={f.id} style={{marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:13,fontWeight:600}}>{fieldLabel(f)} {!anonymize&&f.op?<span style={{color:'var(--mu)',fontWeight:400}}>· {f.op}</span>:null}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:'#0c447c'}}>{f.totalRain}"</span>
+                  </div>
+                  <div style={{background:'#f0f0ea',borderRadius:6,height:10,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:6,background:'#3498db',width:`${maxRain>0?(f.totalRain/maxRain)*100:0}%`,transition:'width 0.5s'}} />
+                  </div>
+                </div>
+              ))}
+              {!fieldStats.length && <div style={{...s.empty,padding:12}}>No rain data yet</div>}
+            </div>
+          </div>
+
+          {/* Summary table */}
+          <div style={s.card}>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>All fields summary</span></div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr style={{background:'#f8f8f5'}}>
+                    {['Field','Hybrid','Tillage','Population','Rain"','Yield bu/ac'].map(h=>(
+                      <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'var(--mu)',borderBottom:'1px solid var(--bdr)',whiteSpace:'nowrap'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fields.map((f,i) => {
+                    const fy = allYields.filter(y=>y.field_id===f.id)
+                    const fr = allRain.filter(r=>r.field_id===f.id)
+                    const avgY = fy.length ? (fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1) : '—'
+                    const totalR = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
+                    return (
+                      <tr key={f.id} style={{borderBottom:'1px solid #f5f5f0'}}>
+                        <td style={{padding:'8px 10px',fontWeight:600}}>{anonymize?`Field ${i+1}`:(f.field_name||f.op)}</td>
+                        <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.hybrid||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.tillage||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.pop||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'#0c447c',fontWeight:600}}>{totalR}"</td>
+                        <td style={{padding:'8px 10px',color:'var(--g)',fontWeight:700}}>{avgY}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── COMPARE ── */}
+      {view === 'compare' && !loading && (
+        <>
+          <div style={s.two}>
+            <div style={s.fg}>
+              <label style={s.lbl}>Field A</label>
+              <select style={{...s.fsel,marginBottom:0}} value={compareA} onChange={e=>setCompareA(e.target.value)}>
+                <option value="">— Select —</option>
+                {fields.map(f=><option key={f.id} value={f.id}>{f.op} · {f.field_name||f.hybrid||'field'}</option>)}
+              </select>
+            </div>
+            <div style={s.fg}>
+              <label style={s.lbl}>Field B</label>
+              <select style={{...s.fsel,marginBottom:0}} value={compareB} onChange={e=>setCompareB(e.target.value)}>
+                <option value="">— Select —</option>
+                {fields.map(f=><option key={f.id} value={f.id}>{f.op} · {f.field_name||f.hybrid||'field'}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {compareDataA && compareDataB && (
+            <div style={{...s.card,marginTop:14}}>
+              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Side by side comparison</span></div>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                  <thead>
+                    <tr style={{background:'#f8f8f5'}}>
+                      <th style={{padding:'10px 12px',textAlign:'left',color:'var(--mu)',fontWeight:600,width:'35%'}}>Category</th>
+                      <th style={{padding:'10px 12px',textAlign:'center',color:'var(--g)',fontWeight:700}}>{anonymize?'Field A':(compareDataA.field_name||compareDataA.op)}</th>
+                      <th style={{padding:'10px 12px',textAlign:'center',color:'#0c447c',fontWeight:700}}>{anonymize?'Field B':(compareDataB.field_name||compareDataB.op)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['Farm', compareDataA.op, compareDataB.op],
+                      ['Hybrid', compareDataA.hybrid||'—', compareDataB.hybrid||'—'],
+                      ['Plant Date', compareDataA.plant_date||'—', compareDataB.plant_date||'—'],
+                      ['Population', compareDataA.pop?compareDataA.pop+' seeds/ac':'—', compareDataB.pop?compareDataB.pop+' seeds/ac':'—'],
+                      ['Tillage', compareDataA.tillage||'—', compareDataB.tillage||'—'],
+                      ['Planting Cond.', compareDataA.pcond||'—', compareDataB.pcond||'—'],
+                      ['Emergence', compareDataA.emerge||'—', compareDataB.emerge||'—'],
+                      ['Weed Pre-plant', compareDataA.weed_pre||'—', compareDataB.weed_pre||'—'],
+                      ['Weed Post-plant', compareDataA.weed_post||'—', compareDataB.weed_post||'—'],
+                      ['Fungicide', compareDataA.fplanned||'—', compareDataB.fplanned||'—'],
+                      ['Fung. Timing', compareDataA.ftiming||'—', compareDataB.ftiming||'—'],
+                      ['Fung. Product', compareDataA.fproduct||'—', compareDataB.fproduct||'—'],
+                      ['Season Rain', compareDataA.rain+'"', compareDataB.rain+'"'],
+                      ['GDUs', compareDataA.gdu, compareDataB.gdu],
+                      ['Yield (avg)', compareDataA.yield+' bu/ac', compareDataB.yield+' bu/ac'],
+                    ].map(([label, a, b]) => (
+                      <tr key={label} style={{borderBottom:'1px solid #f5f5f0'}}>
+                        <td style={{padding:'8px 12px',color:'var(--mu)',fontWeight:500}}>{label}</td>
+                        <td style={{padding:'8px 12px',textAlign:'center',fontWeight: label==='Yield (avg)'?700:400, color: label==='Yield (avg)'?'var(--g)':label==='Season Rain'?'#0c447c':'var(--tx)'}}>{anonymize&&['Farm'].includes(label)?'—':a}</td>
+                        <td style={{padding:'8px 12px',textAlign:'center',fontWeight: label==='Yield (avg)'?700:400, color: label==='Yield (avg)'?'#0c447c':label==='Season Rain'?'#0c447c':'var(--tx)'}}>{anonymize&&['Farm'].includes(label)?'—':b}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {(!compareDataA || !compareDataB) && <div style={{...s.empty,marginTop:20}}>Select two fields above to compare</div>}
+        </>
+      )}
+
+      {/* ── BY HYBRID ── */}
+      {view === 'hybrid' && !loading && (
+        <>
+          <div style={{...s.fg,marginBottom:12}}>
+            <label style={s.lbl}>Select hybrid</label>
+            <select style={s.fsel} value={selectedHybrid} onChange={e=>setSelectedHybrid(e.target.value)}>
+              <option value="">— Select hybrid —</option>
+              {hybrids.map(h=><option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          {selectedHybrid && (
+            <div style={s.card}>
+              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Hybrid {selectedHybrid} — all fields</span></div>
+              <div style={{padding:'13px 14px'}}>
+                {hybridFields.length === 0 ? <div style={{...s.empty,padding:12}}>No fields with this hybrid</div> : hybridFields.map((f,i) => {
+                  const fy = allYields.filter(y=>y.field_id===f.id)
+                  const fr = allRain.filter(r=>r.field_id===f.id)
+                  const avgY = fy.length?(fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1):null
+                  const totalR = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
+                  return (
+                    <div key={f.id} style={{padding:'12px 0',borderBottom:'1px solid var(--bdr)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:600}}>{anonymize?`Grower ${i+1}`:(f.op)}</div>
+                          <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{anonymize?`Field ${i+1}`:(f.field_name||'—')} · {f.plant_date||'—'}</div>
+                          <div style={{fontSize:12,color:'var(--mu)',marginTop:1}}>Pop: {f.pop||'—'} · Tillage: {f.tillage||'—'} · Rain: {totalR}"</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          {avgY ? <div style={{fontSize:20,fontWeight:700,color:'var(--g)'}}>{avgY}<span style={{fontSize:12,fontWeight:400,color:'var(--mu)'}}> bu/ac</span></div> : <div style={{fontSize:13,color:'var(--hi)'}}>No yield</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {hybridFields.some(f=>allYields.some(y=>y.field_id===f.id)) && (
+                  <div style={{marginTop:12,padding:'10px 12px',background:'var(--gl)',borderRadius:10}}>
+                    <div style={{fontSize:12,color:'var(--mu)',fontWeight:600,marginBottom:4}}>HYBRID AVERAGE</div>
+                    <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>
+                      {(() => {
+                        const allHY = hybridFields.flatMap(f=>allYields.filter(y=>y.field_id===f.id).map(y=>Number(y.yield_buac)))
+                        return allHY.length ? (allHY.reduce((a,b)=>a+b,0)/allHY.length).toFixed(1)+' bu/ac avg across '+allHY.length+' field'+(allHY.length!==1?'s':'') : '—'
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {!selectedHybrid && <div style={s.empty}>Select a hybrid to see all fields planted with it</div>}
+        </>
+      )}
+
+      <style>{`
+        @media print {
+          nav, button, a[href], .no-print { display: none !important; }
+          body { background: white !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
 // LOGIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 const ADMIN_PIN = '0726'
@@ -1373,6 +1774,10 @@ export default function App() {
     {id:'photos',label:'Photos',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>},
     {id:'scout',label:'Scout',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>},
     {id:'notes',label:'Notes',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>},
+    ...(isAdmin ? [
+      {id:'yield',label:'Yield',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>},
+      {id:'reports',label:'Reports',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>},
+    ] : []),
   ]
 
   return (
@@ -1393,6 +1798,8 @@ export default function App() {
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
       {tab==='scout'    &&<ScoutTab fields={fields} showToast={showToast} />}
       {tab==='notes'    &&<VisitNotesTab fields={fields} showToast={showToast} />}
+      {tab==='yield'    &&isAdmin&&<YieldTab fields={fields} showToast={showToast} />}
+      {tab==='reports'  &&isAdmin&&<ReportsTab fields={fields} showToast={showToast} />}
       <Toast msg={toast} />
     </>
   )
