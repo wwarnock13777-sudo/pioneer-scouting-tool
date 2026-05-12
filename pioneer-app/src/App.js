@@ -448,8 +448,8 @@ function EntryTab({ onSaved, showToast }) {
     const { data: newField, error } = await supabase.from('fields').insert([row]).select().single()
     setSaving(false)
     if (error) { showToast('Save failed: '+error.message); return }
-    const sub = encodeURIComponent(`Pioneer Field Data — ${form.op} — ${form.plant_date}`)
-    const body = encodeURIComponent(`Pioneer Field: ${form.op}\nHybrid: ${form.hybrid||'—'}\nLocation: ${form.loc||'—'}\nDate: ${form.plant_date}`)
+    const sub = encodeURIComponent(` Field Data — ${form.op} — ${form.plant_date}`)
+    const body = encodeURIComponent(` Field: ${form.op}\nHybrid: ${form.hybrid||'—'}\nLocation: ${form.loc||'—'}\nDate: ${form.plant_date}`)
     window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
     showToast('Field saved! Backfilling weather data…'); onSaved()
     // Backfill historical weather if plant_date is in the past
@@ -1234,14 +1234,13 @@ function LoginScreen({ onLogin }) {
         <div style={{ width:72, height:72, background:'var(--g)', borderRadius:20, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
           <svg viewBox="0 0 100 100" width="48" height="48"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
         </div>
-        <div style={{ fontSize:22, fontWeight:700, color:'var(--tx)' }}>Round Prairie Field Tracker</div>
-        <div style={{ fontSize:14, color:'var(--mu)', marginTop:4 }}>Pioneer® Hybrid Showcase</div>
+        <div style={{ fontSize:22, fontWeight:700, color:'var(--tx)' }}>W² Scouting Tool</div>
       </div>
 
       {step === 1 && (
         <div style={{ width:'100%', maxWidth:340 }}>
           <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your operation name</div>
-          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Type "admin" for full access</div>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Enter your operation name to continue</div>
           <input
             style={{ ...s.inp, fontSize:17, padding:'14px', marginBottom:12, textAlign:'center' }}
             value={opName}
@@ -1382,7 +1381,7 @@ export default function App() {
         <div style={{width:38,height:38,borderRadius:8,background:'#fff',padding:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
           <svg viewBox="0 0 100 100" width="30" height="30"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
         </div>
-        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>Round Prairie Field Tracker</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isAdmin ? '🔑 Admin' : user.opName}</div></div>
+        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>W² Scouting Tool</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isAdmin ? '🔑 Admin' : user.opName}</div></div>
         <button onClick={handleLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Sign out</button>
       </div>
       <nav style={s.nav}>
