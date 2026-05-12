@@ -427,6 +427,7 @@ function EntryTab({ onSaved, showToast }) {
   const [showLocMap, setShowLocMap] = useState(false)
   const [sel, setSel] = useState({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   const [saving, setSaving] = useState(false)
+  const [smsData, setSmsData] = useState(null) // {nums, msg} ready to send
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const pick = (g,v) => setSel(s=>({...s,[g]:s[g]===v?'':v}))
   const addContact = () => { if(form.contacts.length<5) set('contacts',[...form.contacts,{name:'',phone:''}]) }
@@ -646,8 +647,8 @@ function PhotosTab({ fields, showToast }) {
       const contacts = getContacts(fdata)
       const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
-        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
-        window.location.href=`sms:${nums}?body=${msg}`
+        const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
+        window.location.href=`sms:7656693258?body=${msg}`
       }
     }
   }
@@ -811,8 +812,8 @@ function ScoutTab({ fields, showToast }) {
       const catLabel=cat||'Other'
       const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
-        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
-        window.location.href=`sms:${nums}?body=${msg}`
+        const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${cat||'Other'})${notes?' — '+notes:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
+        window.location.href=`sms:7656693258?body=${msg}`
       }
     }
   }
@@ -946,33 +947,12 @@ function VisitNotesTab({ fields, showToast }) {
     setSaving(false)
     if (error) { showToast('Save failed: ' + error.message); return }
 
-    // Email
-    const sub = encodeURIComponent(`Field Visit Note — ${selectedField?.op} — ${date}`)
-    const body = encodeURIComponent(
-      `Field Visit Report\n` +
-      `==============================\n` +
-      `Farm: ${selectedField?.op || '—'}\n` +
-      `Field: ${selectedField?.loc || selectedField?.hybrid || '—'}\n` +
-      `Hybrid: ${selectedField?.hybrid || '—'}\n` +
-      `Date: ${date}\n\n` +
-      `Notes:\n${note.trim()}`
-    )
-    window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
-
-    loadNotes()
-    setNote('')
-    showToast('Visit note saved & sent!')
-
-    // Text all contacts after save
+    // Text via your number
     if (selectedField) {
       const contacts = getContacts(selectedField)
-      console.log('Contacts found:', contacts)
       if(contacts.length > 0){
-        const nums = contacts.map(c => c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
-        const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app`)
-        setTimeout(()=>{ window.location.href=`sms:${nums}?body=${msg}` }, 800)
-      } else {
-        showToast('Note saved — no contacts set up for this field')
+        const msg=encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${savedNote} — View in app: https://pioneer-scouting-tool.vercel.app`)
+        setTimeout(()=>{ window.location.href=`sms:7656693258?body=${msg}` }, 500)
       }
     }
   }
@@ -1028,7 +1008,7 @@ function VisitNotesTab({ fields, showToast }) {
                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 {saving ? 'Saving…' : 'Save & send note'}
               </button>
-              {selectedField?.phone && <div style={{fontSize:12,color:'var(--mu)',textAlign:'center',marginTop:-4}}>Will email + text {selectedField.phone}</div>}
+              {selectedField && getContacts(selectedField).length > 0 && <div style={{fontSize:12,color:'var(--mu)',textAlign:'center',marginTop:-4}}>Will text contacts from 765-669-3258</div>}
             </div>
           </div>
 
