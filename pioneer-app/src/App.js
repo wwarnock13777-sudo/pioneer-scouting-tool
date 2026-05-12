@@ -494,7 +494,7 @@ function LocMapPicker({ onPick, initLat, initLng }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
-function EntryTab({ onSaved, showToast }) {
+function EntryTab({ onSaved, showToast, repName }) {
   const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', acres:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
   const [showLocMap, setShowLocMap] = useState(false)
   const [mapReady, setMapReady] = useState(false)
@@ -512,7 +512,7 @@ function EntryTab({ onSaved, showToast }) {
     setSaving(true)
     const tillage = sel.tillage==='Other'?(form.tillage_other||'Other'):sel.tillage
     const ftiming = sel.ftiming==='Other'?(form.ftiming_other||'Other'):sel.ftiming
-    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, saved_at:new Date().toLocaleDateString(),
+    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, rep_name: repName||'Will', saved_at:new Date().toLocaleDateString(),
       contacts: JSON.stringify(form.contacts.filter(c=>c.phone.trim())),
       grower: form.contacts[0]?.name || '',
       phone: form.contacts[0]?.phone || '',
@@ -1320,16 +1320,14 @@ function YieldTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// REPORTS TAB (ADMIN ONLY)
+// REPORTS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-function ReportsTab({ fields, showToast }) {
+function ReportsTab({ fields, showToast, isAdmin, userOpName }) {
   const [view, setView] = useState('overview') // overview | compare | hybrid
   const [allYields, setAllYields] = useState([])
   const [allRain, setAllRain] = useState([])
-  const [compareA, setCompareA] = useState('')
-  const [compareB, setCompareB] = useState('')
-  const [compareDataA, setCompareDataA] = useState(null)
-  const [compareDataB, setCompareDataB] = useState(null)
+  const [compareFields, setCompareFields] = useState(['', ''])
+  const [compareData, setCompareData] = useState([null, null])
   const [selectedHybrid, setSelectedHybrid] = useState('')
   const [anonymize, setAnonymize] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1349,44 +1347,68 @@ function ReportsTab({ fields, showToast }) {
     setLoading(false)
   }
 
-  // Build field stats
+  // Field stats
   const fieldStats = fields.map((f, i) => {
     const fy = allYields.filter(y => y.field_id === f.id)
     const fr = allRain.filter(r => r.field_id === f.id)
-    const avgYield = fy.length ? (fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1) : null
-    const totalRain = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
-    return { ...f, avgYield, totalRain: parseFloat(totalRain), yieldEntries: fy, rainEntries: fr, idx: i+1 }
-  }).filter(f => f.avgYield !== null)
+    const avgYield = fy.length ? (fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length) : null
+    const totalRain = fr.reduce((a,r)=>a+Number(r.amount),0)
+    return { ...f, avgYield, totalRain, idx: i+1 }
+  })
+  const withYield = fieldStats.filter(f => f.avgYield !== null)
+  const sorted = [...withYield].sort((a,b) => b.avgYield - a.avgYield)
+  const maxYield = sorted.length ? sorted[0].avgYield : 1
+  const maxRain = fieldStats.length ? Math.max(...fieldStats.map(f=>f.totalRain), 0.01) : 1
 
-  const sorted = [...fieldStats].sort((a,b) => parseFloat(b.avgYield)-parseFloat(a.avgYield))
-  const maxYield = sorted.length ? parseFloat(sorted[0].avgYield) : 1
-  const maxRain = fieldStats.length ? Math.max(...fieldStats.map(f=>f.totalRain)) : 1
-
-  // Hybrid comparison data
   const hybrids = [...new Set(fields.map(f=>f.hybrid).filter(Boolean))].sort()
   const hybridFields = fields.filter(f => f.hybrid === selectedHybrid)
 
-  async function loadCompare(fid, setter) {
-    if (!fid) { setter(null); return }
+  // Load compare data for a field
+  async function loadOneCompare(fid, idx) {
+    if (!fid) {
+      const next = [...compareData]; next[idx] = null; setCompareData(next); return
+    }
     const f = fields.find(x => x.id === fid)
     const [{ data: yd },{ data: rd },{ data: gd }] = await Promise.all([
       supabase.from('yield_log').select('*').eq('field_id', fid),
       supabase.from('rain_log').select('amount').eq('field_id', fid),
       supabase.from('gdu_log').select('gdu').eq('field_id', fid),
     ])
-    setter({
+    const next = [...compareData]
+    next[idx] = {
       ...f,
       yield: yd?.length ? (yd.reduce((a,y)=>a+Number(y.yield_buac),0)/yd.length).toFixed(1) : '—',
       rain: rd?.reduce((a,r)=>a+Number(r.amount),0).toFixed(2) || '0.00',
       gdu: gd?.reduce((a,g)=>a+Number(g.gdu),0).toFixed(1) || '0',
-    })
+    }
+    setCompareData(next)
   }
 
-  useEffect(() => { loadCompare(compareA, setCompareDataA) }, [compareA])
-  useEffect(() => { loadCompare(compareB, setCompareDataB) }, [compareB])
+  function updateCompareField(idx, fid) {
+    const next = [...compareFields]; next[idx] = fid; setCompareFields(next)
+    loadOneCompare(fid, idx)
+  }
 
-  function printReport() {
-    window.print()
+  function addCompareField() {
+    if (compareFields.length >= 5) return
+    setCompareFields([...compareFields, ''])
+    setCompareData([...compareData, null])
+  }
+
+  function removeCompareField(idx) {
+    const nf = compareFields.filter((_,i)=>i!==idx)
+    const nd = compareData.filter((_,i)=>i!==idx)
+    setCompareFields(nf); setCompareData(nd)
+  }
+
+  // Name display logic
+  const displayName = (f, idx) => {
+    if (!anonymize) return f.field_name || f.op
+    return `Field ${idx+1}`
+  }
+  const displayOp = (f) => {
+    if (!anonymize) return f.op
+    return ''
   }
 
   const navBtns = [
@@ -1395,20 +1417,19 @@ function ReportsTab({ fields, showToast }) {
     { id:'hybrid', label:'By Hybrid' },
   ]
 
-  const farmLabel = (f) => anonymize ? `Field ${f.idx}` : f.op
-  const fieldLabel = (f) => anonymize ? `Field ${f.idx}` : (f.field_name || f.hybrid || f.op)
+  const compareLabels = ['A','B','C','D','E']
 
   return (
     <div style={s.view}>
       {/* Sub nav */}
-      <div style={{display:'flex',gap:6,marginBottom:14,overflowX:'auto'}}>
+      <div style={{display:'flex',gap:6,marginBottom:14,overflowX:'auto',flexWrap:'wrap'}}>
         {navBtns.map(b=>(
           <button key={b.id} onClick={()=>setView(b.id)} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'none',cursor:'pointer',background:view===b.id?'var(--g)':'#f0f0ea',color:view===b.id?'#fff':'var(--tx)'}}>{b.label}</button>
         ))}
-        <button onClick={()=>setAnonymize(a=>!a)} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--bdr)',cursor:'pointer',background:anonymize?'#fff3e0':'#f0f0ea',color:anonymize?'#7a4500':'var(--mu)',marginLeft:'auto'}}>
+        <button onClick={()=>setAnonymize(a=>!a)} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--bdr)',cursor:'pointer',background:anonymize?'#fff3e0':'#f0f0ea',color:anonymize?'#7a4500':'var(--mu)'}}>
           {anonymize ? '👤 Anonymized' : '👤 Anonymize'}
         </button>
-        <button onClick={printReport} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--g)',cursor:'pointer',background:'var(--gl)',color:'var(--gd)',display:'flex',alignItems:'center',gap:5}}>
+        <button onClick={()=>window.print()} style={{flexShrink:0,padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:600,border:'1px solid var(--g)',cursor:'pointer',background:'var(--gl)',color:'var(--gd)',display:'flex',alignItems:'center',gap:5}}>
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print / PDF
         </button>
@@ -1417,63 +1438,60 @@ function ReportsTab({ fields, showToast }) {
       {loading && <div style={s.empty}>Loading data…</div>}
 
       {/* ── OVERVIEW ── */}
-      {view === 'overview' && !loading && (
+      {view==='overview' && !loading && (
         <>
-          {/* Yield chart */}
           <div style={s.card}>
-            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Yield — bu/ac (highest to lowest)</span></div>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Yield ranking — bu/ac</span></div>
             <div style={{padding:'13px 14px'}}>
-              {sorted.length === 0 ? <div style={{...s.empty,padding:12}}>No yield data yet — add yields in the Yield tab</div> : sorted.map((f,i) => (
+              {sorted.length===0 ? <div style={{...s.empty,padding:12}}>No yield data yet</div> : sorted.map((f,i)=>(
                 <div key={f.id} style={{marginBottom:10}}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                    <span style={{fontSize:13,fontWeight:600}}>{i+1}. {fieldLabel(f)} {!anonymize&&f.op?<span style={{color:'var(--mu)',fontWeight:400}}>· {f.op}</span>:null}</span>
-                    <span style={{fontSize:14,fontWeight:700,color:'var(--g)'}}>{f.avgYield} bu/ac</span>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,alignItems:'center'}}>
+                    <span style={{fontSize:13,fontWeight:600}}>
+                      {i+1}. {displayName(f,i)}
+                      {!anonymize && f.op && f.field_name && <span style={{color:'var(--mu)',fontWeight:400}}> · {f.op}</span>}
+                    </span>
+                    <span style={{fontSize:14,fontWeight:700,color:'var(--g)'}}>{f.avgYield.toFixed(1)} bu/ac</span>
                   </div>
                   <div style={{background:'#f0f0ea',borderRadius:6,height:10,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:6,background:`hsl(${120-i*15},60%,45%)`,width:`${(parseFloat(f.avgYield)/maxYield)*100}%`,transition:'width 0.5s'}} />
+                    <div style={{height:'100%',borderRadius:6,background:`hsl(${120-i*12},60%,42%)`,width:`${(f.avgYield/maxYield)*100}%`,transition:'width 0.5s'}} />
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Rain chart */}
           <div style={s.card}>
-            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Season rainfall by field</span></div>
+            <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Season rainfall</span></div>
             <div style={{padding:'13px 14px'}}>
               {[...fieldStats].sort((a,b)=>b.totalRain-a.totalRain).map((f,i)=>(
                 <div key={f.id} style={{marginBottom:10}}>
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                    <span style={{fontSize:13,fontWeight:600}}>{fieldLabel(f)} {!anonymize&&f.op?<span style={{color:'var(--mu)',fontWeight:400}}>· {f.op}</span>:null}</span>
-                    <span style={{fontSize:14,fontWeight:700,color:'#0c447c'}}>{f.totalRain}"</span>
+                    <span style={{fontSize:13,fontWeight:600}}>{displayName(f,i)}{!anonymize&&f.op&&f.field_name?<span style={{color:'var(--mu)',fontWeight:400}}> · {f.op}</span>:null}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:'#0c447c'}}>{f.totalRain.toFixed(2)}"</span>
                   </div>
                   <div style={{background:'#f0f0ea',borderRadius:6,height:10,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:6,background:'#3498db',width:`${maxRain>0?(f.totalRain/maxRain)*100:0}%`,transition:'width 0.5s'}} />
+                    <div style={{height:'100%',borderRadius:6,background:'#3498db',width:`${(f.totalRain/maxRain)*100}%`,transition:'width 0.5s'}} />
                   </div>
                 </div>
               ))}
-              {!fieldStats.length && <div style={{...s.empty,padding:12}}>No rain data yet</div>}
             </div>
           </div>
 
-          {/* Summary table */}
           <div style={s.card}>
             <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>All fields summary</span></div>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-                <thead>
-                  <tr style={{background:'#f8f8f5'}}>
-                    {['Field','Hybrid','Acres','Tillage','Population','Rain"','Yield bu/ac'].map(h=>(
-                      <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'var(--mu)',borderBottom:'1px solid var(--bdr)',whiteSpace:'nowrap'}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
+                <thead><tr style={{background:'#f8f8f5'}}>
+                  {['Field','Hybrid','Acres','Tillage','Pop','Rain"','Yield bu/ac'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'var(--mu)',borderBottom:'1px solid var(--bdr)',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr></thead>
                 <tbody>
-                  {fields.map((f,i) => {
-                    const fy = allYields.filter(y=>y.field_id===f.id)
-                    const fr = allRain.filter(r=>r.field_id===f.id)
-                    const avgY = fy.length ? (fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1) : '—'
-                    const totalR = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
+                  {fields.map((f,i)=>{
+                    const fy=allYields.filter(y=>y.field_id===f.id)
+                    const fr=allRain.filter(r=>r.field_id===f.id)
+                    const avgY=fy.length?(fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1):'—'
+                    const totalR=fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
                     return (
                       <tr key={f.id} style={{borderBottom:'1px solid #f5f5f0'}}>
                         <td style={{padding:'8px 10px',fontWeight:600}}>{anonymize?`Field ${i+1}`:(f.field_name||f.op)}</td>
@@ -1494,59 +1512,68 @@ function ReportsTab({ fields, showToast }) {
       )}
 
       {/* ── COMPARE ── */}
-      {view === 'compare' && !loading && (
+      {view==='compare' && !loading && (
         <>
-          <div style={s.two}>
-            <div style={s.fg}>
-              <label style={s.lbl}>Field A</label>
-              <select style={{...s.fsel,marginBottom:0}} value={compareA} onChange={e=>setCompareA(e.target.value)}>
-                <option value="">— Select —</option>
-                {fields.map(f=><option key={f.id} value={f.id}>{f.op} · {f.field_name||f.hybrid||'field'}</option>)}
+          <div style={{...s.info,marginBottom:12}}>Select up to 5 fields to compare side by side</div>
+          {compareFields.map((fid, idx) => (
+            <div key={idx} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:'var(--g)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0}}>{compareLabels[idx]}</div>
+              <select style={{...s.fsel,marginBottom:0,flex:1}} value={fid} onChange={e=>updateCompareField(idx,e.target.value)}>
+                <option value="">— Select field —</option>
+                {fields.map(f=><option key={f.id} value={f.id}>{f.op}{f.field_name?' · '+f.field_name:''}{f.hybrid?' · '+f.hybrid:''}</option>)}
               </select>
+              {compareFields.length > 2 && (
+                <button onClick={()=>removeCompareField(idx)} style={{background:'none',border:'1px solid #f5c6c6',borderRadius:8,color:'#c0392b',padding:'6px 10px',cursor:'pointer',fontSize:13,flexShrink:0}}>✕</button>
+              )}
             </div>
-            <div style={s.fg}>
-              <label style={s.lbl}>Field B</label>
-              <select style={{...s.fsel,marginBottom:0}} value={compareB} onChange={e=>setCompareB(e.target.value)}>
-                <option value="">— Select —</option>
-                {fields.map(f=><option key={f.id} value={f.id}>{f.op} · {f.field_name||f.hybrid||'field'}</option>)}
-              </select>
-            </div>
-          </div>
+          ))}
+          {compareFields.length < 5 && (
+            <button onClick={addCompareField} style={{...s.btnOut,marginBottom:14}}>
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add field to compare
+            </button>
+          )}
 
-          {compareDataA && compareDataB && (
-            <div style={{...s.card,marginTop:14}}>
-              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Side by side comparison</span></div>
+          {compareData.some(d=>d!==null) && (
+            <div style={s.card}>
+              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Side by side</span></div>
               <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-                  <thead>
-                    <tr style={{background:'#f8f8f5'}}>
-                      <th style={{padding:'10px 12px',textAlign:'left',color:'var(--mu)',fontWeight:600,width:'35%'}}>Category</th>
-                      <th style={{padding:'10px 12px',textAlign:'center',color:'var(--g)',fontWeight:700}}>{anonymize?'Field A':(compareDataA.field_name||compareDataA.op)}</th>
-                      <th style={{padding:'10px 12px',textAlign:'center',color:'#0c447c',fontWeight:700}}>{anonymize?'Field B':(compareDataB.field_name||compareDataB.op)}</th>
-                    </tr>
-                  </thead>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead><tr style={{background:'#f8f8f5'}}>
+                    <th style={{padding:'8px 10px',textAlign:'left',color:'var(--mu)',fontWeight:600,minWidth:100}}>Category</th>
+                    {compareData.map((d,i)=>d&&(
+                      <th key={i} style={{padding:'8px 10px',textAlign:'center',fontWeight:700,color:'var(--g)',minWidth:100}}>
+                        {compareLabels[i]}{!anonymize&&d?(': '+(d.field_name||d.op||'')):''}
+                      </th>
+                    ))}
+                  </tr></thead>
                   <tbody>
                     {[
-                      ['Farm', compareDataA.op, compareDataB.op],
-                      ['Hybrid', compareDataA.hybrid||'—', compareDataB.hybrid||'—'],
-                      ['Plant Date', compareDataA.plant_date||'—', compareDataB.plant_date||'—'],
-                      ['Population', compareDataA.pop?compareDataA.pop+' seeds/ac':'—', compareDataB.pop?compareDataB.pop+' seeds/ac':'—'],
-                      ['Tillage', compareDataA.tillage||'—', compareDataB.tillage||'—'],
-                      ['Planting Cond.', compareDataA.pcond||'—', compareDataB.pcond||'—'],
-                      ['Emergence', compareDataA.emerge||'—', compareDataB.emerge||'—'],
-                      ['Weed Pre-plant', compareDataA.weed_pre||'—', compareDataB.weed_pre||'—'],
-                      ['Weed Post-plant', compareDataA.weed_post||'—', compareDataB.weed_post||'—'],
-                      ['Fungicide', compareDataA.fplanned||'—', compareDataB.fplanned||'—'],
-                      ['Fung. Timing', compareDataA.ftiming||'—', compareDataB.ftiming||'—'],
-                      ['Fung. Product', compareDataA.fproduct||'—', compareDataB.fproduct||'—'],
-                      ['Season Rain', compareDataA.rain+'"', compareDataB.rain+'"'],
-                      ['GDUs', compareDataA.gdu, compareDataB.gdu],
-                      ['Yield (avg)', compareDataA.yield+' bu/ac', compareDataB.yield+' bu/ac'],
-                    ].map(([label, a, b]) => (
+                      ['Farm', f=>anonymize?'—':f.op],
+                      ['Field', f=>anonymize?'—':(f.field_name||'—')],
+                      ['Hybrid', f=>f.hybrid||'—'],
+                      ['Acres', f=>f.acres||'—'],
+                      ['Plant Date', f=>f.plant_date||'—'],
+                      ['Population', f=>f.pop?f.pop+' k/ac':'—'],
+                      ['Tillage', f=>f.tillage||'—'],
+                      ['Planting Cond.', f=>f.pcond||'—'],
+                      ['Emergence', f=>f.emerge||'—'],
+                      ['Weed Pre', f=>f.weed_pre||'—'],
+                      ['Weed Post', f=>f.weed_post||'—'],
+                      ['Fungicide', f=>f.fplanned||'—'],
+                      ['Fung. Timing', f=>f.ftiming||'—'],
+                      ['Fung. Product', f=>f.fproduct||'—'],
+                      ['Season Rain', f=>f.rain+'"'],
+                      ['GDUs', f=>f.gdu],
+                      ['Yield (avg)', f=>f.yield+' bu/ac'],
+                    ].map(([label, val])=>(
                       <tr key={label} style={{borderBottom:'1px solid #f5f5f0'}}>
-                        <td style={{padding:'8px 12px',color:'var(--mu)',fontWeight:500}}>{label}</td>
-                        <td style={{padding:'8px 12px',textAlign:'center',fontWeight: label==='Yield (avg)'?700:400, color: label==='Yield (avg)'?'var(--g)':label==='Season Rain'?'#0c447c':'var(--tx)'}}>{anonymize&&['Farm'].includes(label)?'—':a}</td>
-                        <td style={{padding:'8px 12px',textAlign:'center',fontWeight: label==='Yield (avg)'?700:400, color: label==='Yield (avg)'?'#0c447c':label==='Season Rain'?'#0c447c':'var(--tx)'}}>{anonymize&&['Farm'].includes(label)?'—':b}</td>
+                        <td style={{padding:'8px 10px',color:'var(--mu)',fontWeight:500,whiteSpace:'nowrap'}}>{label}</td>
+                        {compareData.map((d,i)=>d?(
+                          <td key={i} style={{padding:'8px 10px',textAlign:'center',fontWeight:label==='Yield (avg)'?700:400,color:label==='Yield (avg)'?'var(--g)':label==='Season Rain'?'#0c447c':'var(--tx)'}}>
+                            {val(d)}
+                          </td>
+                        ):<td key={i}/>)}
                       </tr>
                     ))}
                   </tbody>
@@ -1554,12 +1581,11 @@ function ReportsTab({ fields, showToast }) {
               </div>
             </div>
           )}
-          {(!compareDataA || !compareDataB) && <div style={{...s.empty,marginTop:20}}>Select two fields above to compare</div>}
         </>
       )}
 
       {/* ── BY HYBRID ── */}
-      {view === 'hybrid' && !loading && (
+      {view==='hybrid' && !loading && (
         <>
           <div style={{...s.fg,marginBottom:12}}>
             <label style={s.lbl}>Select hybrid</label>
@@ -1568,68 +1594,81 @@ function ReportsTab({ fields, showToast }) {
               {hybrids.map(h=><option key={h} value={h}>{h}</option>)}
             </select>
           </div>
-          {selectedHybrid && (
-            <div style={s.card}>
-              <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Hybrid {selectedHybrid} — all fields</span></div>
-              <div style={{padding:'13px 14px'}}>
-                {hybridFields.length === 0 ? <div style={{...s.empty,padding:12}}>No fields with this hybrid</div> : hybridFields.map((f,i) => {
-                  const fy = allYields.filter(y=>y.field_id===f.id)
-                  const fr = allRain.filter(r=>r.field_id===f.id)
-                  const avgY = fy.length?(fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length).toFixed(1):null
-                  const totalR = fr.reduce((a,r)=>a+Number(r.amount),0).toFixed(2)
-                  return (
-                    <div key={f.id} style={{padding:'12px 0',borderBottom:'1px solid var(--bdr)'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                        <div>
-                          <div style={{fontSize:14,fontWeight:600}}>{anonymize?`Grower ${i+1}`:(f.op)}</div>
-                          <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{anonymize?`Field ${i+1}`:(f.field_name||'—')} · {f.plant_date||'—'}</div>
-                          <div style={{fontSize:12,color:'var(--mu)',marginTop:1}}>Acres: {f.acres||'—'} · Pop: {f.pop||'—'} · Tillage: {f.tillage||'—'} · Rain: {totalR}"</div>
+
+          {selectedHybrid && (() => {
+            const hFields = hybridFields.map(f => {
+              const fy = allYields.filter(y=>y.field_id===f.id)
+              const fr = allRain.filter(r=>r.field_id===f.id)
+              return {
+                ...f,
+                avgY: fy.length?(fy.reduce((a,y)=>a+Number(y.yield_buac),0)/fy.length):null,
+                totalR: fr.reduce((a,r)=>a+Number(r.amount),0),
+              }
+            }).sort((a,b)=>(b.avgY||0)-(a.avgY||0))
+
+            const totalAcres = hFields.reduce((a,f)=>a+Number(f.acres||0),0)
+            const allY = hFields.filter(f=>f.avgY!==null).map(f=>f.avgY)
+            const avgYield = allY.length?(allY.reduce((a,b)=>a+b,0)/allY.length):null
+            const maxHY = allY.length?Math.max(...allY):1
+
+            return (
+              <>
+                {/* Summary box */}
+                <div style={{background:'var(--g)',borderRadius:14,padding:16,marginBottom:12,color:'#fff'}}>
+                  <div style={{fontSize:13,opacity:0.8,marginBottom:8}}>Hybrid {selectedHybrid}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+                    <div><div style={{fontSize:11,opacity:0.7}}>Total acres</div><div style={{fontSize:20,fontWeight:700}}>{totalAcres>0?totalAcres.toFixed(0):'—'}</div></div>
+                    <div><div style={{fontSize:11,opacity:0.7}}>Avg yield</div><div style={{fontSize:20,fontWeight:700}}>{avgYield?avgYield.toFixed(1)+' bu':'—'}</div></div>
+                    <div><div style={{fontSize:11,opacity:0.7}}>Est. bushels</div><div style={{fontSize:20,fontWeight:700}}>{avgYield&&totalAcres>0?(avgYield*totalAcres).toFixed(0):'—'}</div></div>
+                  </div>
+                </div>
+
+                {/* Ranked list */}
+                <div style={s.card}>
+                  <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Yield ranking — {hFields.length} field{hFields.length!==1?'s':''}</span></div>
+                  <div style={{padding:'13px 14px'}}>
+                    {hFields.map((f,i)=>{
+                      const isMe = userOpName && f.op && f.op.toLowerCase()===userOpName.toLowerCase()
+                      const label = isMe ? (f.field_name||f.op) : (anonymize||!isAdmin) ? `Grower ${i+1}` : (f.field_name||f.op)
+                      const sublabel = isMe ? f.op : (anonymize||!isAdmin) ? '' : f.op
+                      return (
+                        <div key={f.id} style={{marginBottom:14,padding:isMe?'10px 12px':'0',background:isMe?'var(--gl)':'transparent',borderRadius:isMe?10:0,border:isMe?'1px solid var(--g)':'none'}}>
+                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,alignItems:'center'}}>
+                            <div>
+                              <span style={{fontSize:13,fontWeight:700,color:isMe?'var(--gd)':'var(--tx)'}}>{i+1}. {label}</span>
+                              {isMe && <span style={{marginLeft:6,fontSize:11,background:'var(--g)',color:'#fff',padding:'2px 7px',borderRadius:10,fontWeight:600}}>You</span>}
+                              {sublabel && <div style={{fontSize:11,color:'var(--mu)',marginTop:1}}>{sublabel}</div>}
+                            </div>
+                            <div style={{textAlign:'right'}}>
+                              <div style={{fontSize:15,fontWeight:700,color:isMe?'var(--g)':'var(--tx)'}}>{f.avgY?f.avgY.toFixed(1)+' bu/ac':'No yield'}</div>
+                              {f.acres && <div style={{fontSize:11,color:'var(--mu)'}}>{f.acres} ac</div>}
+                            </div>
+                          </div>
+                          {f.avgY && (
+                            <div style={{background:'rgba(0,0,0,0.08)',borderRadius:6,height:8,overflow:'hidden'}}>
+                              <div style={{height:'100%',borderRadius:6,background:isMe?'var(--g)':'#999',width:`${(f.avgY/maxHY)*100}%`,transition:'width 0.5s'}} />
+                            </div>
+                          )}
+                          <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>
+                            {f.pop&&`Pop: ${f.pop} · `}{f.tillage&&`Tillage: ${f.tillage} · `}Rain: {f.totalR.toFixed(2)}"
+                          </div>
                         </div>
-                        <div style={{textAlign:'right'}}>
-                          {avgY ? <div style={{fontSize:20,fontWeight:700,color:'var(--g)'}}>{avgY}<span style={{fontSize:12,fontWeight:400,color:'var(--mu)'}}> bu/ac</span></div> : <div style={{fontSize:13,color:'var(--hi)'}}>No yield</div>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-                {(() => {
-                  const totalAcres = hybridFields.reduce((a,f)=>a+Number(f.acres||0),0)
-                  const allHY = hybridFields.flatMap(f=>allYields.filter(y=>y.field_id===f.id).map(y=>Number(y.yield_buac)))
-                  const avgYield = allHY.length ? (allHY.reduce((a,b)=>a+b,0)/allHY.length).toFixed(1) : null
-                  return (
-                    <div style={{marginTop:12,padding:'12px 14px',background:'var(--gl)',borderRadius:10}}>
-                      <div style={{fontSize:11,color:'var(--mu)',fontWeight:600,marginBottom:8,letterSpacing:'0.04em',textTransform:'uppercase'}}>Hybrid summary</div>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                        <div>
-                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Total acres</div>
-                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{totalAcres>0?totalAcres.toFixed(0)+'ac':'—'}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Avg yield</div>
-                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{avgYield?avgYield+' bu/ac':'—'}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Fields</div>
-                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{hybridFields.length}</div>
-                        </div>
-                        <div>
-                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Total bushels est.</div>
-                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{avgYield&&totalAcres>0?(parseFloat(avgYield)*totalAcres).toFixed(0):'—'}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>
-            </div>
-          )}
-          {!selectedHybrid && <div style={s.empty}>Select a hybrid to see all fields planted with it</div>}
+                      )
+                    })}
+                    {!hFields.length && <div style={{...s.empty,padding:12}}>No fields with this hybrid</div>}
+                  </div>
+                </div>
+              </>
+            )
+          })()}
+
+          {!selectedHybrid && <div style={s.empty}>Select a hybrid to see all fields and rankings</div>}
         </>
       )}
 
       <style>{`
         @media print {
-          nav, button, a[href], .no-print { display: none !important; }
+          nav, button, a[href] { display: none !important; }
           body { background: white !important; }
           * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
@@ -1639,90 +1678,95 @@ function ReportsTab({ fields, showToast }) {
 }
 
 
+
 // ══════════════════════════════════════════════════════════════════════════════
 // LOGIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
-const ADMIN_PIN = '0726'
+const WILL_PIN = '0726'
+const WILL_REP = 'will'
 
 function LoginScreen({ onLogin }) {
-  const [step, setStep] = useState(1) // 1=op name, 2=PIN
-  const [opName, setOpName] = useState('')
+  const [step, setStep] = useState(1)
+  const [name, setName] = useState('')
   const [pin, setPin] = useState('')
-  const [isNew, setIsNew] = useState(false)
   const [confirmPin, setConfirmPin] = useState('')
+  const [mode, setMode] = useState(null) // 'rep' | 'customer'
+  const [isNew, setIsNew] = useState(false)
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
 
-  async function handleOpSubmit() {
-    const val = opName.trim()
-    if (!val) { setError('Enter your operation name'); return }
+  async function handleNameSubmit() {
+    const val = name.trim().toLowerCase()
+    if (!val) { setError('Enter your name'); return }
     setError('')
-    if (val.toLowerCase() === 'admin') {
-      setIsNew(false); setStep(2); return
+
+    // Will = hardcoded rep admin
+    if (val === WILL_REP) {
+      setMode('rep'); setIsNew(false); setStep(2); return
     }
+
     setChecking(true)
-    // Check if this operation exists in DB with a PIN set
-    const { data, error: lookupErr } = await supabase.from('user_pins').select('pin').eq('op_name', val.toLowerCase()).maybeSingle()
-    setChecking(false)
-    if (data && data.pin) {
-      setIsNew(false)
-    } else {
-      setIsNew(true) // new user — will create PIN
+    // Check rep_pins first
+    const { data: repData } = await supabase.from('rep_pins').select('pin').eq('rep_name', val).maybeSingle()
+    if (repData) {
+      setMode('rep'); setIsNew(false); setChecking(false); setStep(2); return
     }
-    setStep(2)
+    // Check if this looks like a rep signup attempt (will handle below)
+    // Check customer pins
+    const { data: custData } = await supabase.from('user_pins').select('pin').eq('op_name', val).maybeSingle()
+    setChecking(false)
+
+    if (custData) {
+      setMode('customer'); setIsNew(false); setStep(2)
+    } else {
+      // New user - ask if rep or customer
+      setMode(null); setStep('choose')
+    }
   }
 
   async function handlePinSubmit() {
     setError('')
-    // Admin login
-    if (opName.trim().toLowerCase() === 'admin') {
-      if (pin === ADMIN_PIN) {
-        onLogin({ role: 'admin', opName: 'Admin' })
+    const val = name.trim().toLowerCase()
+
+    if (mode === 'rep') {
+      // Will's hardcoded PIN
+      if (val === WILL_REP) {
+        if (pin === WILL_PIN) {
+          onLogin({ role:'rep', repName:'Will', opName:'Will' })
+        } else { setError('Incorrect PIN'); setPin('') }
+        return
+      }
+      // Other rep
+      if (isNew) {
+        if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
+        if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
+        const { error: e } = await supabase.from('rep_pins').insert([{ rep_name: val, pin }])
+        if (e) { setError('Error: ' + e.message); return }
+        onLogin({ role:'rep', repName: name.trim(), opName: name.trim() })
       } else {
-        setError('Incorrect PIN'); setPin('')
+        const { data } = await supabase.from('rep_pins').select('pin').eq('rep_name', val).maybeSingle()
+        if (data && data.pin === pin) {
+          onLogin({ role:'rep', repName: name.trim(), opName: name.trim() })
+        } else { setError('Incorrect PIN'); setPin('') }
       }
       return
     }
 
-    if (isNew) {
-      // Creating new PIN
-      if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
-      if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
-      const { error: dbErr } = await supabase.from('user_pins').insert([{ op_name: opName.trim().toLowerCase(), pin }])
-      if (dbErr) { setError('Error saving PIN: ' + dbErr.message); return }
-      onLogin({ role: 'customer', opName: opName.trim() })
-    } else {
-      // Existing PIN check
-      const { data } = await supabase.from('user_pins').select('pin').eq('op_name', opName.trim().toLowerCase()).maybeSingle()
-      if (data && data.pin === pin) {
-        onLogin({ role: 'customer', opName: opName.trim() })
+    if (mode === 'customer') {
+      if (isNew) {
+        if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
+        if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
+        const { error: e } = await supabase.from('user_pins').insert([{ op_name: val, pin }])
+        if (e) { setError('Error: ' + e.message); return }
+        onLogin({ role:'customer', opName: name.trim() })
       } else {
-        setError('Incorrect PIN'); setPin('')
+        const { data } = await supabase.from('user_pins').select('pin').eq('op_name', val).maybeSingle()
+        if (data && data.pin === pin) {
+          onLogin({ role:'customer', opName: name.trim() })
+        } else { setError('Incorrect PIN'); setPin('') }
       }
     }
   }
-
-  const pinBoxStyle = (filled) => ({
-    width:56, height:64, border: filled ? '2px solid var(--g)' : '2px solid var(--bdr)',
-    borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center',
-    fontSize:28, fontWeight:700, color:'var(--tx)', background: filled ? 'var(--gl)' : '#f8f8f5'
-  })
-
-  const numBtn = (n) => (
-    <button key={n} onClick={() => {
-      if (step === 2) {
-        if (!isNew || confirmPin.length < 4 || pin.length < 4) {
-          if (isNew && pin.length === 4) {
-            if (confirmPin.length < 4) setConfirmPin(c => c.length < 4 ? c + n : c)
-          } else {
-            setPin(p => p.length < 4 ? p + n : p)
-          }
-        }
-      }
-    }} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-      {n}
-    </button>
-  )
 
   const handleNum = (n) => {
     if (isNew && pin.length === 4) {
@@ -1731,14 +1775,16 @@ function LoginScreen({ onLogin }) {
       setPin(p => p.length < 4 ? p + n : p)
     }
   }
-
   const handleBack = () => {
-    if (isNew && pin.length === 4) {
-      setConfirmPin(c => c.slice(0, -1))
-    } else {
-      setPin(p => p.slice(0, -1))
-    }
+    if (isNew && pin.length === 4) setConfirmPin(c => c.slice(0,-1))
+    else setPin(p => p.slice(0,-1))
   }
+
+  const pinBoxStyle = (filled) => ({
+    width:56, height:64, border: filled?'2px solid var(--g)':'2px solid var(--bdr)',
+    borderRadius:12, display:'flex', alignItems:'center', justifyContent:'center',
+    fontSize:28, fontWeight:700, color:'var(--tx)', background: filled?'var(--gl)':'#f8f8f5'
+  })
 
   const nums = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 
@@ -1751,74 +1797,75 @@ function LoginScreen({ onLogin }) {
         <div style={{ fontSize:22, fontWeight:700, color:'var(--tx)' }}>W² Scouting Tool</div>
       </div>
 
+      {/* Step 1 — Name */}
       {step === 1 && (
         <div style={{ width:'100%', maxWidth:340 }}>
-          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your operation name</div>
-          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Enter your operation name to continue</div>
-          <input
-            style={{ ...s.inp, fontSize:17, padding:'14px', marginBottom:12, textAlign:'center' }}
-            value={opName}
-            onChange={e => setOpName(e.target.value)}
-            placeholder="Operation name"
-            onKeyDown={e => e.key === 'Enter' && handleOpSubmit()}
-            autoFocus
-          />
+          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Enter your name</div>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>Operation name or rep name</div>
+          <input style={{ ...s.inp, fontSize:17, padding:'14px', marginBottom:12, textAlign:'center' }}
+            value={name} onChange={e=>setName(e.target.value)} placeholder="Name"
+            onKeyDown={e=>e.key==='Enter'&&handleNameSubmit()} autoFocus />
           {error && <div style={{ color:'#c0392b', fontSize:13, textAlign:'center', marginBottom:10 }}>{error}</div>}
-          <button style={s.btn} onClick={handleOpSubmit} disabled={checking}>
-            {checking ? 'Checking…' : 'Continue →'}
-          </button>
+          <button style={s.btn} onClick={handleNameSubmit} disabled={checking}>{checking?'Checking…':'Continue →'}</button>
         </div>
       )}
 
+      {/* Step choose — new user picks rep or customer */}
+      {step === 'choose' && (
+        <div style={{ width:'100%', maxWidth:340 }}>
+          <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:6, textAlign:'center' }}>Welcome, {name}!</div>
+          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20, textAlign:'center' }}>How are you using this app?</div>
+          <button style={{...s.btn, marginBottom:10}} onClick={()=>{ setMode('rep'); setIsNew(true); setStep(2) }}>
+            🌾 I'm a crop consultant / rep
+          </button>
+          <button style={{...s.btnOut}} onClick={()=>{ setMode('customer'); setIsNew(true); setStep(2) }}>
+            🏡 I'm a grower / farmer
+          </button>
+          <button onClick={()=>setStep(1)} style={{background:'none',border:'none',color:'var(--mu)',fontSize:13,cursor:'pointer',marginTop:14,display:'block',margin:'14px auto 0'}}>← Back</button>
+        </div>
+      )}
+
+      {/* Step 2 — PIN */}
       {step === 2 && (
         <div style={{ width:'100%', maxWidth:340, textAlign:'center' }}>
-          <button onClick={() => { setStep(1); setPin(''); setConfirmPin(''); setError('') }} style={{ background:'none', border:'none', color:'var(--mu)', fontSize:13, cursor:'pointer', marginBottom:16, display:'flex', alignItems:'center', gap:4, margin:'0 auto 16px' }}>
-            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-            Back
+          <button onClick={()=>{setStep(1);setPin('');setConfirmPin('');setError('')}} style={{background:'none',border:'none',color:'var(--mu)',fontSize:13,cursor:'pointer',marginBottom:16,display:'flex',alignItems:'center',gap:4,margin:'0 auto 16px'}}>
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>Back
           </button>
-          <div style={{ fontSize:13, color:'var(--mu)', marginBottom:4 }}>{opName}</div>
+          <div style={{fontSize:13,color:'var(--mu)',marginBottom:4}}>{name} · {mode==='rep'?'Rep':'Grower'}</div>
           {isNew ? (
             <>
-              <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:4 }}>
+              <div style={{fontSize:16,fontWeight:600,color:'var(--tx)',marginBottom:4}}>
                 {pin.length < 4 ? 'Create your 4-digit PIN' : 'Confirm your PIN'}
               </div>
-              <div style={{ fontSize:13, color:'var(--mu)', marginBottom:20 }}>
-                {pin.length < 4 ? "You'll use this to log in next time" : 'Enter your PIN again to confirm'}
+              <div style={{fontSize:13,color:'var(--mu)',marginBottom:20}}>
+                {pin.length < 4 ? "You'll use this every time you log in" : 'Enter your PIN again'}
               </div>
             </>
           ) : (
-            <div style={{ fontSize:16, fontWeight:600, color:'var(--tx)', marginBottom:20 }}>Enter your PIN</div>
+            <div style={{fontSize:16,fontWeight:600,color:'var(--tx)',marginBottom:20}}>Enter your PIN</div>
           )}
 
-          {/* PIN dots display */}
-          <div style={{ display:'flex', gap:12, justifyContent:'center', marginBottom:8 }}>
-            {[0,1,2,3].map(i => (
-              <div key={i} style={pinBoxStyle(isNew ? (pin.length < 4 ? i < pin.length : i < confirmPin.length) : i < pin.length)}>
-                {isNew ? (pin.length < 4 ? (i < pin.length ? '●' : '') : (i < confirmPin.length ? '●' : '')) : (i < pin.length ? '●' : '')}
+          <div style={{display:'flex',gap:12,justifyContent:'center',marginBottom:8}}>
+            {[0,1,2,3].map(i=>(
+              <div key={i} style={pinBoxStyle(isNew?(pin.length<4?i<pin.length:i<confirmPin.length):i<pin.length)}>
+                {isNew?(pin.length<4?(i<pin.length?'●':''):(i<confirmPin.length?'●':'')):(i<pin.length?'●':'')}
               </div>
             ))}
           </div>
-          {isNew && pin.length === 4 && <div style={{ fontSize:11, color:'var(--g)', fontWeight:600, marginBottom:8, letterSpacing:'0.04em', textTransform:'uppercase' }}>Confirming PIN</div>}
+          {isNew&&pin.length===4&&<div style={{fontSize:11,color:'var(--g)',fontWeight:600,marginBottom:8,letterSpacing:'0.04em',textTransform:'uppercase'}}>Confirming PIN</div>}
+          {error&&<div style={{color:'#c0392b',fontSize:13,marginBottom:12}}>{error}</div>}
 
-          {error && <div style={{ color:'#c0392b', fontSize:13, marginBottom:12 }}>{error}</div>}
-
-          {/* Number pad */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, maxWidth:260, margin:'16px auto 0' }}>
-            {nums.map((n, i) => {
-              if (n === '') return <div key={i} />
-              if (n === '⌫') return (
-                <button key={i} onClick={handleBack} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }}>⌫</button>
-              )
-              return (
-                <button key={i} onClick={() => handleNum(n)} style={{ width:72, height:72, borderRadius:36, background:'#f8f8f5', border:'1px solid var(--bdr)', fontSize:22, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto' }}>{n}</button>
-              )
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,maxWidth:260,margin:'16px auto 0'}}>
+            {nums.map((n,i)=>{
+              if(n==='') return <div key={i}/>
+              if(n==='⌫') return <button key={i} onClick={handleBack} style={{width:72,height:72,borderRadius:36,background:'#f8f8f5',border:'1px solid var(--bdr)',fontSize:22,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}>⌫</button>
+              return <button key={i} onClick={()=>handleNum(n)} style={{width:72,height:72,borderRadius:36,background:'#f8f8f5',border:'1px solid var(--bdr)',fontSize:22,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}>{n}</button>
             })}
           </div>
 
-          {/* Submit when PIN complete */}
-          {((isNew && pin.length === 4 && confirmPin.length === 4) || (!isNew && pin.length === 4)) && (
-            <button style={{ ...s.btn, marginTop:20 }} onClick={handlePinSubmit}>
-              {isNew ? 'Create PIN & Sign in' : 'Sign in'}
+          {((isNew&&pin.length===4&&confirmPin.length===4)||(!isNew&&pin.length===4))&&(
+            <button style={{...s.btn,marginTop:20}} onClick={handlePinSubmit}>
+              {isNew?'Create PIN & Sign in':'Sign in'}
             </button>
           )}
         </div>
@@ -1853,6 +1900,9 @@ export default function App() {
     let query = supabase.from('fields').select('*').order('created_at',{ascending:false})
     if (activeUser.role === 'customer') {
       query = query.ilike('op', activeUser.opName)
+    } else if (activeUser.role === 'rep') {
+      // Rep sees only their own fields
+      query = query.eq('rep_name', activeUser.repName || activeUser.opName)
     }
     const{data}=await query
     setFields(data||[])
@@ -1878,7 +1928,8 @@ export default function App() {
 
   if (!user) return <LoginScreen onLogin={handleLogin} />
 
-  const isAdmin = user.role === 'admin'
+  const isRep = user.role === 'rep'
+  const isAdmin = isRep // reps have admin privileges
 
   const tabs=[
     {id:'dashboard',label:'Fields',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>},
@@ -1899,20 +1950,20 @@ export default function App() {
         <div style={{width:38,height:38,borderRadius:8,background:'#fff',padding:4,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
           <svg viewBox="0 0 100 100" width="30" height="30"><text x="50" y="70" textAnchor="middle" fontSize="62">🌱</text></svg>
         </div>
-        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>W² Scouting Tool</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isAdmin ? '🔑 Admin' : user.opName}</div></div>
+        <div style={{flex:1}}><div style={{fontSize:16,fontWeight:600,color:'#fff'}}>W² Scouting Tool</div><div style={{fontSize:12,color:'rgba(255,255,255,0.8)',marginTop:1}}>{isRep ? `🌾 ${user.repName||user.opName}` : user.opName}</div></div>
         <button onClick={handleLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:500,cursor:'pointer'}}>Sign out</button>
       </div>
       <nav style={s.nav}>
         {tabs.map(t=><button key={t.id} style={s.nb(tab===t.id)} onClick={()=>setTab(t.id)}>{t.icon}{t.label}</button>)}
       </nav>
       {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} userOpName={user?.opName} />}
-      {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} />}
+      {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} repName={user?.repName||user?.opName} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
       {tab==='scout'    &&<ScoutTab fields={fields} showToast={showToast} />}
       {tab==='notes'    &&<VisitNotesTab fields={fields} showToast={showToast} />}
       {tab==='yield'    &&isAdmin&&<YieldTab fields={fields} showToast={showToast} />}
-      {tab==='reports'  &&isAdmin&&<ReportsTab fields={fields} showToast={showToast} />}
+      {tab==='reports'  &&isAdmin&&<ReportsTab fields={fields} showToast={showToast} isAdmin={isAdmin} userOpName={user?.opName} />}
       <Toast msg={toast} />
     </>
   )
