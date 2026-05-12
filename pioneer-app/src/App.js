@@ -844,8 +844,8 @@ function ScoutTab({ fields, showToast }) {
           <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span>Satellite map</span>
           <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
         </button>
-        <div style={{border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden',height:mapOpen?(modal?'25vh':'45vh'):'0px',transition:'height 0.2s'}}>
-          <div ref={mapRef} style={{width:'100%',height:'100%',minHeight:mapOpen?'150px':'0px'}} />
+        <div style={{border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden',height:mapOpen?'45vh':'0px',transition:'height 0.2s'}}>
+          <div ref={mapRef} style={{width:'100%',height:'45vh'}} />
         </div>
       </div>
 
