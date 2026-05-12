@@ -802,15 +802,11 @@ function ScoutTab({ fields, showToast }) {
   function dropPin(){
     if(!fieldId){showToast('Select a field first');return}
     navigator.geolocation.getCurrentPosition(pos=>{
-      try {
-        setPending({lat:pos.coords.latitude,lng:pos.coords.longitude})
-        if(mapObj.current) mapObj.current.setView([pos.coords.latitude,pos.coords.longitude],16)
-        setModal(true);setCat('');setNotes('');setPinPhoto(null)
-      } catch(e) {
-        console.error('dropPin error:',e)
-        showToast('Error dropping pin: '+e.message)
-      }
-    },()=>showToast('Enable location access first'),{enableHighAccuracy:true,timeout:10000})
+      setPending({lat:pos.coords.latitude,lng:pos.coords.longitude})
+      setCat('');setNotes('');setPinPhoto(null);setModal(true)
+    },(err)=>{
+      showToast('Enable location access in Settings → Safari → Location')
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:0})
   }
 
   async function savePin(){
@@ -879,10 +875,11 @@ function ScoutTab({ fields, showToast }) {
       </div>
 
       {modal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:150,display:'flex',alignItems:'flex-end'}}>
-          <div style={{background:'#fff',borderRadius:'20px 20px 0 0',padding:'20px 16px 36px',width:'100%',maxHeight:'85vh',overflowY:'auto'}}>
-            <div style={{width:40,height:4,background:'var(--bdr)',borderRadius:2,margin:'0 auto 16px'}} />
-            <h3 style={{fontSize:16,fontWeight:600,marginBottom:4}}>New scout pin</h3>
+        <div style={{background:'var(--card)',border:'1px solid var(--g)',borderRadius:14,padding:'16px',marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <h3 style={{fontSize:16,fontWeight:600}}>New scout pin</h3>
+              <button onClick={()=>setModal(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'var(--mu)'}}>✕</button>
+            </div>
             {currentHybrid&&<div style={{fontSize:13,color:'#2979ff',fontWeight:500,marginBottom:12}}>📍 Dropping in: {currentHybrid}</div>}
             <label style={s.lbl}>Category</label>
             <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,margin:'6px 0 14px'}}>
@@ -911,8 +908,6 @@ function ScoutTab({ fields, showToast }) {
               {pinPhoto&&<img src={pinPhoto} alt="preview" style={{width:'100%',height:120,objectFit:'cover',borderRadius:9,marginTop:8}} />}
             </div>
             <button style={{...s.btn,marginBottom:10}} onClick={savePin}>Save pin</button>
-            <button style={s.btnOut} onClick={()=>setModal(false)}>Cancel</button>
-          </div>
         </div>
       )}
     </div>
