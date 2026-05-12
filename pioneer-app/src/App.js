@@ -267,8 +267,8 @@ function DashboardTab({ fields, onRefresh, isAdmin, userOpName }) {
               {farms[farm].map((f, i) => (
                 <div key={f.id} onClick={()=>setDetail(f)} style={{background:'var(--card)',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:'pointer',borderTop: i>0 ? '1px solid var(--bdr)' : 'none'}}>
                   <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:600,color:'var(--tx)'}}>{f.hybrid||'—'}</div>
-                    <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{f.plant_date||'no date'}{f.loc?' · '+f.loc:''}</div>
+                    <div style={{fontSize:14,fontWeight:600,color:'var(--tx)'}}>{f.field_name||f.hybrid||'—'}</div>
+                    <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{f.hybrid||''}{f.plant_date?' · '+f.plant_date:''}</div>
                   </div>
                   <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--hi)" fill="none" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
@@ -359,22 +359,79 @@ async function backfillWeather(fieldId, plantDate, zip, showToast) {
   }
 }
 
+// ── Contact helpers ─────────────────────────────────────────────────────────
+function getContacts(field) {
+  try {
+    const c = typeof field.contacts === 'string' ? JSON.parse(field.contacts) : (field.contacts || [])
+    return c.filter(x => x && x.phone && x.phone.trim())
+  } catch { return field.phone ? [{name:'',phone:field.phone}] : [] }
+}
+
+// ── Location picker map ─────────────────────────────────────────────────────
+function LocMapPicker({ onPick, initLat, initLng }) {
+  const mapRef = useRef(null)
+  const mapObj = useRef(null)
+  const markerRef = useRef(null)
+
+  useEffect(()=>{
+    const L = window.L
+    if(!mapObj.current){
+      const startLat = initLat || 41.5
+      const startLng = initLng || -93.5
+      mapObj.current = L.map('loc-map', { zoomControl:true }).setView([startLat, startLng], initLat ? 16 : 13)
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(mapObj.current)
+
+      // Try to go to user location
+      if(!initLat){
+        navigator.geolocation.getCurrentPosition(pos=>{
+          mapObj.current.setView([pos.coords.latitude, pos.coords.longitude], 15)
+        },()=>{},{enableHighAccuracy:true})
+      }
+
+      // Place existing pin if any
+      if(initLat){
+        const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+        markerRef.current = L.marker([initLat,initLng],{icon}).addTo(mapObj.current)
+      }
+
+      mapObj.current.on('click', function(e){
+        const {lat,lng} = e.latlng
+        if(markerRef.current) mapObj.current.removeLayer(markerRef.current)
+        const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+        markerRef.current = L.marker([lat,lng],{icon}).addTo(mapObj.current)
+        onPick(lat,lng)
+      })
+    }
+    return ()=>{ if(mapObj.current){ mapObj.current.remove(); mapObj.current=null } }
+  },[])
+
+  return null
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
 function EntryTab({ onSaved, showToast }) {
-  const [form, setForm] = useState({ op:'', grower:'', rep:'', phone:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
+  const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
+  const [showLocMap, setShowLocMap] = useState(false)
   const [sel, setSel] = useState({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const pick = (g,v) => setSel(s=>({...s,[g]:s[g]===v?'':v}))
+  const addContact = () => { if(form.contacts.length<5) set('contacts',[...form.contacts,{name:'',phone:''}]) }
+  const removeContact = (i) => set('contacts',form.contacts.filter((_,idx)=>idx!==i))
+  const updateContact = (i,key,val) => { const c=[...form.contacts]; c[i]={...c[i],[key]:val}; set('contacts',c) }
 
   const handleSave = async () => {
     if (!form.op.trim()) { showToast('Enter an operation name first'); return }
     setSaving(true)
     const tillage = sel.tillage==='Other'?(form.tillage_other||'Other'):sel.tillage
     const ftiming = sel.ftiming==='Other'?(form.ftiming_other||'Other'):sel.ftiming
-    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, saved_at:new Date().toLocaleDateString()}
+    const row = {...form, tillage, ftiming, pcond:sel.pcond, emerge:sel.emerge, fplanned:sel.fplanned, saved_at:new Date().toLocaleDateString(),
+      contacts: JSON.stringify(form.contacts.filter(c=>c.phone.trim())),
+      grower: form.contacts[0]?.name || '',
+      phone: form.contacts[0]?.phone || '',
+    }
     delete row.tillage_other; delete row.ftiming_other
     const { data: newField, error } = await supabase.from('fields').insert([row]).select().single()
     setSaving(false)
@@ -387,7 +444,8 @@ function EntryTab({ onSaved, showToast }) {
     if (newField && form.plant_date && form.zip) {
       backfillWeather(newField.id, form.plant_date, form.zip, showToast)
     }
-    setForm({ op:'', grower:'', rep:'', phone:'', loc:'', zip:'', hybrid:'', plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'' })
+    setForm({ op:'', field_name:'', hybrid:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
+    setShowLocMap(false)
     setSel({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   }
 
@@ -402,9 +460,56 @@ function EntryTab({ onSaved, showToast }) {
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Operation info</span></div>
         <div style={s.cb}>
-          {[['op','Operation name','Farm / operation name'],['grower','Grower / contact','Name'],['phone','Contact phone number','10-digit number'],['rep','Representative','Rep name'],['loc','Field location','Township, section, county…'],['zip','Field zip code','5-digit zip'],['hybrid','Hybrid planted','Hybrid number']].map(([k,l,p])=>(
-            <div key={k} style={s.fg}><label style={s.lbl}>{l}</label><input style={s.inp} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={p} inputMode={k==='zip'?'numeric':undefined} maxLength={k==='zip'?5:undefined} /></div>
-          ))}
+          <div style={s.fg}><label style={s.lbl}>Operation name</label><input style={s.inp} value={form.op} onChange={e=>set('op',e.target.value)} placeholder="Farm / operation name" /></div>
+          <div style={s.fg}><label style={s.lbl}>Field name</label><input style={s.inp} value={form.field_name} onChange={e=>set('field_name',e.target.value)} placeholder="e.g. North 40, Home Farm, River Field" /></div>
+          <div style={s.fg}><label style={s.lbl}>Hybrid planted</label><input style={s.inp} value={form.hybrid} onChange={e=>set('hybrid',e.target.value)} placeholder="Hybrid number" /></div>
+          <div style={s.fg}><label style={s.lbl}>Field zip code</label><input style={s.inp} value={form.zip} onChange={e=>set('zip',e.target.value)} placeholder="5-digit zip" inputMode="numeric" maxLength={5} /></div>
+
+          {/* Field location — drop pin on map */}
+          <div style={s.fg}>
+            <label style={s.lbl}>Field location</label>
+            <button type="button" onClick={()=>setShowLocMap(true)} style={{...s.inp, textAlign:'left', cursor:'pointer', color: form.loc_lat ? 'var(--tx)' : 'var(--hi)', display:'flex', alignItems:'center', gap:8, background: form.loc_lat ? 'var(--gl)' : '#f8f8f5', border: form.loc_lat ? '1px solid var(--g)' : '1px solid var(--bdr)'}}>
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke={form.loc_lat?'var(--g)':'var(--hi)'} fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              {form.loc_lat ? `📍 ${Number(form.loc_lat).toFixed(5)}, ${Number(form.loc_lng).toFixed(5)}` : 'Tap to drop pin on map'}
+            </button>
+            {form.loc_lat && <input style={{...s.inp,marginTop:6}} value={form.loc} onChange={e=>set('loc',e.target.value)} placeholder="Add description (optional)" />}
+          </div>
+
+          {/* Location picker modal */}
+          {showLocMap && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:200,display:'flex',flexDirection:'column'}}>
+              <div style={{background:'#fff',padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:600}}>Drop pin on field</div>
+                  <div style={{fontSize:12,color:'var(--mu)'}}>Tap the map to place your pin</div>
+                </div>
+                <button onClick={()=>setShowLocMap(false)} style={{background:'var(--g)',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontWeight:600,cursor:'pointer',fontSize:14}}>Done</button>
+              </div>
+              <div id="loc-map" style={{flex:1}} />
+              <LocMapPicker
+                onPick={(lat,lng)=>{ set('loc_lat',lat); set('loc_lng',lng) }}
+                initLat={form.loc_lat} initLng={form.loc_lng}
+              />
+            </div>
+          )}
+
+          {/* Up to 5 contacts */}
+          <div style={s.fg}>
+            <label style={s.lbl}>Contacts (up to 5)</label>
+            {form.contacts.map((c,i)=>(
+              <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:6,marginBottom:6,alignItems:'center'}}>
+                <input style={s.inp} value={c.name} onChange={e=>updateContact(i,'name',e.target.value)} placeholder="Name" />
+                <input style={s.inp} value={c.phone} onChange={e=>updateContact(i,'phone',e.target.value)} placeholder="Phone number" inputMode="tel" />
+                {i>0&&<button onClick={()=>removeContact(i)} style={{background:'none',border:'1px solid #f5c6c6',borderRadius:8,color:'#c0392b',padding:'8px',cursor:'pointer',fontSize:16,lineHeight:1}}>×</button>}
+              </div>
+            ))}
+            {form.contacts.length < 5 && (
+              <button onClick={addContact} style={{...s.btnOut,marginTop:0,padding:'9px',fontSize:13}}>
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add contact
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <div style={s.card}>
@@ -520,11 +625,12 @@ function PhotosTab({ fields, showToast }) {
     const{error}=await supabase.from('photos').insert([{field_id:fieldId,log_date:date,note,src:preview}])
     if(error){showToast('Save failed: '+error.message);return}
     setPreview(null);setNote('');setDate(TODAY);load();showToast('Photo saved!')
-    // Auto-text the field contact
+    // Auto-text all contacts
     const fdata=fields.find(f=>f.id===fieldId)
-    if(fdata?.phone){
-      const msg=encodeURIComponent(`Field update for ${fdata.op}: New photo logged on ${date||TODAY}${note?' — '+note:''}. Check the Pioneer Field Tracker app for details.`)
-      window.open(`sms:${fdata.phone}?body=${msg}`)
+    if(fdata){
+      const contacts = getContacts(fdata)
+      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. Check the Pioneer Field Tracker app for details.`)
+      contacts.forEach((c,i)=>{ setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), i*1200) })
     }
   }
   return (
@@ -774,12 +880,13 @@ function ScoutTab({ fields, showToast }) {
     if(!notes&&!cat){showToast('Add a category or notes');return}
     await supabase.from('scout_pins').insert([{field_id:fieldId,lat:pending.lat,lng:pending.lng,cat:cat||'Other',notes,log_date:TODAY,photo:pinPhoto}])
     setModal(false);loadPins();showToast('Pin dropped!')
-    // Auto-text the field contact
+    // Auto-text all contacts
     const fdata=fields.find(f=>f.id===fieldId)
-    if(fdata?.phone){
+    if(fdata){
+      const contacts = getContacts(fdata)
       const catLabel=cat||'Other'
-      const msg=encodeURIComponent(`Field update for ${fdata.op}: New scout pin dropped (${catLabel})${notes?' — '+notes:''}. Check the Pioneer Field Tracker app for details.`)
-      window.open(`sms:${fdata.phone}?body=${msg}`)
+      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. Check the Pioneer Field Tracker app for details.`)
+      contacts.forEach((c,i)=>{ setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), i*1200) })
     }
   }
 
@@ -953,12 +1060,11 @@ function VisitNotesTab({ fields, showToast }) {
     )
     window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
 
-    // Text to field contact
-    if (selectedField?.phone) {
-      setTimeout(() => {
-        const msg = encodeURIComponent(`Field visit note for ${selectedField.op} on ${date}: ${note.trim()}`)
-        window.open(`sms:${selectedField.phone}?body=${msg}`)
-      }, 1500)
+    // Text all contacts
+    if (selectedField) {
+      const contacts = getContacts(selectedField)
+      const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()}`)
+      contacts.forEach((c,i) => { setTimeout(()=>window.open(`sms:${c.phone}?body=${msg}`), 1500 + i*1200) })
     }
 
     loadNotes()
