@@ -363,9 +363,19 @@ async function backfillWeather(fieldId, plantDate, zip, showToast) {
 // ── Contact helpers ─────────────────────────────────────────────────────────
 function getContacts(field) {
   try {
-    const c = typeof field.contacts === 'string' ? JSON.parse(field.contacts) : (field.contacts || [])
-    return c.filter(x => x && x.phone && x.phone.trim())
-  } catch { return field.phone ? [{name:'',phone:field.phone}] : [] }
+    // Try contacts JSON column first
+    if (field.contacts) {
+      const c = typeof field.contacts === 'string' ? JSON.parse(field.contacts) : field.contacts
+      const valid = (Array.isArray(c) ? c : []).filter(x => x && x.phone && x.phone.trim())
+      if (valid.length > 0) return valid
+    }
+    // Fall back to legacy phone field
+    if (field.phone && field.phone.trim()) return [{name: field.grower||'', phone: field.phone.trim()}]
+    return []
+  } catch(e) {
+    if (field.phone && field.phone.trim()) return [{name:'', phone:field.phone.trim()}]
+    return []
+  }
 }
 
 // ── Location picker map ─────────────────────────────────────────────────────
@@ -949,19 +959,22 @@ function VisitNotesTab({ fields, showToast }) {
     )
     window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
 
-    // Text all contacts
-    if (selectedField) {
-      const contacts = getContacts(selectedField)
-      const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app`)
-      if(contacts.length>0){
-        const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
-        setTimeout(()=>{ window.location.href=`sms:${nums}?body=${msg}` }, 1000)
-      }
-    }
-
     loadNotes()
     setNote('')
     showToast('Visit note saved & sent!')
+
+    // Text all contacts after save
+    if (selectedField) {
+      const contacts = getContacts(selectedField)
+      console.log('Contacts found:', contacts)
+      if(contacts.length > 0){
+        const nums = contacts.map(c => c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
+        const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app`)
+        setTimeout(()=>{ window.location.href=`sms:${nums}?body=${msg}` }, 800)
+      } else {
+        showToast('Note saved — no contacts set up for this field')
+      }
+    }
   }
 
   return (
