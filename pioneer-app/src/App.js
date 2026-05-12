@@ -711,12 +711,9 @@ function ScoutTab({ fields, showToast }) {
   const [pending,setPending]=useState(null)
   const [cat,setCat]=useState('');const [notes,setNotes]=useState('');const [pinPhoto,setPinPhoto]=useState(null)
   const [mapOpen,setMapOpen]=useState(true)
-  const [currentHybrid,setCurrentHybrid]=useState(null)
-  const [zones,setZones]=useState([])
   const mapRef=useRef(null);const mapObj=useRef(null);const markers=useRef([])
   const locMarker=useRef(null);const pathLine=useRef(null)
   const pathPts=useRef([]);const watchId=useRef(null)
-  const zoneLayers=useRef([])
 
   useEffect(()=>{
     if(!mapObj.current){
@@ -783,98 +780,6 @@ function ScoutTab({ fields, showToast }) {
     })
   }
 
-  async function handleShapefile(e){
-    const file=e.target.files[0];if(!file)return
-    const L=window.L
-    if(!window.shp){
-      await new Promise((res,rej)=>{
-        const sc=document.createElement('script')
-        sc.src='https://unpkg.com/shpjs@latest/dist/shp.js'
-        sc.onload=res;sc.onerror=rej
-        document.head.appendChild(sc)
-      })
-    }
-    try{
-      showToast('Loading shapefile…')
-      const buf=await file.arrayBuffer()
-      const geojson=await window.shp(buf)
-      const features=Array.isArray(geojson)?geojson.reduce((a,g)=>a.concat(g.features||[]),[]):(geojson.features||[geojson])
-
-      // All known hybrid/variety attribute names from JD Ops Center, FieldView, Granular, AgLeader
-      const hybridKeys=[
-        'Variety','variety','VARIETY',
-        'Hybrid','hybrid','HYBRID',
-        'Product','product','PRODUCT',
-        'SeedVariety','seedvariety','SEEDVARIETY',
-        'Seed_Var','seed_var','SEED_VAR',
-        'CropVariety','cropvariety',
-        'VarietyName','varietyname',
-        'HybridName','hybridname',
-        'ProductName','productname',
-        'Variety_Na','variety_na',
-        'VARIETY_NA','var_name','VAR_NAME',
-        'brand_name','BRAND_NAME',
-        'seed','Seed','SEED',
-      ]
-
-      // Detect which key is present in this file
-      const sampleProps = features[0]?.properties || {}
-      const detectedKey = hybridKeys.find(k => sampleProps[k] !== undefined && sampleProps[k] !== null && sampleProps[k] !== '')
-      console.log('Shapefile props:', Object.keys(sampleProps))
-      console.log('Detected hybrid key:', detectedKey)
-
-      // Group features by hybrid value so same hybrid = same color
-      const hybridColorMap = {}
-      const palette = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a']
-      let colorIdx = 0
-
-      const getHybridVal = (props) => {
-        if (detectedKey) return String(props[detectedKey]||'').trim() || 'Unknown'
-        // fallback: try all keys
-        return hybridKeys.reduce((found,k)=>found||(props[k]?String(props[k]).trim():''),'') || 'Unknown'
-      }
-
-      zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l));zoneLayers.current=[]
-      const newZones=[]
-
-      features.forEach((feat)=>{
-        const props=feat.properties||{}
-        const hybridVal=getHybridVal(props)
-        if(!hybridColorMap[hybridVal]){
-          hybridColorMap[hybridVal]=palette[colorIdx%palette.length]
-          colorIdx++
-        }
-        const color=hybridColorMap[hybridVal]
-        const layer=L.geoJSON(feat,{
-          style:{color,weight:1.5,fillColor:color,fillOpacity:0.35,opacity:0.8},
-          onEachFeature:(f,l)=>{
-            const p=f.properties||{}
-            const rate=p.Rt_Apd||p.SeedRate||p.rate||p.Rate||p.RATE||p.seeding_rate||''
-            l.bindPopup(`<div style="font-size:14px;padding:6px"><strong style="color:${color}">⬛ ${hybridVal}</strong>${rate?`<br/><span style="font-size:12px;color:#666">Rate: ${rate}</span>`:''}</div>`,{maxWidth:200})
-          }
-        }).addTo(mapObj.current)
-        zoneLayers.current.push(layer)
-      })
-
-      // Build unique zone list for legend
-      Object.entries(hybridColorMap).forEach(([hybrid,color])=>{
-        newZones.push({hybrid,color,layer:null})
-      })
-
-      setZones(newZones)
-      if(zoneLayers.current.length){
-        const group=L.featureGroup(zoneLayers.current)
-        mapObj.current.fitBounds(group.getBounds(),{padding:[20,20]})
-      }
-      const zoneCount=Object.keys(hybridColorMap).length
-      showToast(`✓ Loaded ${zoneCount} hybrid zone${zoneCount!==1?'s':''} from ${features.length} features`)
-      if(!detectedKey) showToast('Tip: hybrid name not auto-detected — tap a zone to see attributes')
-    }catch(err){
-      console.error('Shapefile error:',err)
-      showToast('Could not read shapefile. Try a .zip with .shp/.dbf/.prj inside.')
-    }
-    e.target.value=''
-  }
 
   function dropPin(){
     if(!fieldId){showToast('Select a field first');return}
@@ -909,12 +814,7 @@ function ScoutTab({ fields, showToast }) {
     <div style={s.view}>
       <FieldSelect fields={fields} value={fieldId} onChange={setFieldId} />
 
-      {currentHybrid&&(
-        <div style={{background:'#2979ff',borderRadius:10,padding:'10px 14px',marginBottom:10,color:'#fff',display:'flex',alignItems:'center',gap:8}}>
-          <span style={{fontSize:18}}>🌽</span>
-          <div><div style={{fontSize:11,opacity:0.8}}>Currently standing in</div><div style={{fontSize:15,fontWeight:700}}>{currentHybrid}</div></div>
-        </div>
-      )}
+
 
       <div style={{marginBottom:10}}>
         <button onClick={()=>setMapOpen(o=>!o)} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
@@ -926,31 +826,6 @@ function ScoutTab({ fields, showToast }) {
         </div>
       </div>
 
-      <div style={s.card}>
-        <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>As-planted field map</span></div>
-        <div style={s.cb}>
-          {zones.length>0&&(
-            <div style={{marginBottom:4}}>
-              <div style={{fontSize:11,fontWeight:600,color:'var(--mu)',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:6}}>Hybrid legend</div>
-              {zones.map((z,i)=>(
-                <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:'1px solid #f5f5f0'}}>
-                  <div style={{width:24,height:16,borderRadius:4,background:z.color,flexShrink:0,border:'1px solid rgba(0,0,0,0.1)'}} />
-                  <span style={{fontSize:13,fontWeight:600,color:'var(--tx)'}}>{z.hybrid}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:20,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
-            <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
-            <p style={{fontSize:14,color:'var(--mu)',fontWeight:500}}>{zones.length?'Upload new shapefile':'Upload as-planted shapefile'}</p>
-            <p style={{fontSize:12,color:'var(--hi)',marginTop:4}}>Zipped shapefile (.zip with .shp .dbf .prj)</p>
-            <input type="file" accept=".zip,.shp" onChange={handleShapefile} style={{display:'none'}} />
-          </label>
-          {zones.length>0&&(
-            <button style={{...s.btnOut,marginTop:0}} onClick={()=>{zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l));zoneLayers.current=[];setZones([]);setCurrentHybrid(null);showToast('Field map cleared')}}>Remove field map</button>
-          )}
-        </div>
-      </div>
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
         <button style={s.btn} onClick={dropPin}>
