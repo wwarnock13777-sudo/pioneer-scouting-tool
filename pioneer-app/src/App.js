@@ -96,7 +96,42 @@ function RainMiniLog({ fieldId }) {
 function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
   const [stats, setStats] = useState({ rain:0, photos:[], pins:[] })
   const [lightbox, setLightbox] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
   const emoji = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
+
+  function startEdit() {
+    setEditForm({
+      op: field.op||'', field_name: field.field_name||'', hybrid: field.hybrid||'',
+      acres: field.acres||'', zip: field.zip||'', loc: field.loc||'',
+      plant_date: field.plant_date||'', pop: field.pop||'', stand_e: field.stand_e||'',
+      tillage: field.tillage||'', pcond: field.pcond||'', emerge: field.emerge||'',
+      weed_pre: field.weed_pre||'', weed_post: field.weed_post||'',
+      fplanned: field.fplanned||'', ftiming: field.ftiming||'', fproduct: field.fproduct||'',
+      notes: field.notes||'',
+    })
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    const { error } = await supabase.from('fields').update(editForm).eq('id', field.id)
+    setSaving(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    Object.assign(field, editForm)
+    setEditing(false)
+  }
+
+  const ef = (k, label, opts={}) => (
+    <div style={s.fg}>
+      <label style={s.lbl}>{label}</label>
+      {opts.textarea
+        ? <textarea style={s.ta} rows="2" value={editForm[k]||''} onChange={e=>setEditForm(f=>({...f,[k]:e.target.value}))} />
+        : <input style={s.inp} type={opts.type||'text'} value={editForm[k]||''} onChange={e=>setEditForm(f=>({...f,[k]:e.target.value}))} inputMode={opts.inputMode} />
+      }
+    </div>
+  )
 
   useEffect(() => {
     async function load() {
@@ -121,6 +156,10 @@ function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
           All fields
         </button>
+        <button onClick={startEdit} style={{display:'flex',alignItems:'center',gap:5,background:'none',border:'1px solid var(--bdr)',borderRadius:8,padding:'6px 10px',color:'var(--g)',fontSize:13,fontWeight:500,cursor:'pointer'}}>
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" fill="none" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>
         <button onClick={async()=>{
           if(!window.confirm('Delete this field and ALL its data? This cannot be undone.'))return
           await Promise.all([
@@ -138,6 +177,38 @@ function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
           Delete field
         </button>
       </div>
+      {editing && (
+        <div style={{...s.card, border:'2px solid var(--g)', marginBottom:14}}>
+          <div style={{...s.ch, justifyContent:'space-between'}}>
+            <span style={{fontSize:14,fontWeight:600}}>Edit field details</span>
+            <button onClick={()=>setEditing(false)} style={{background:'none',border:'none',fontSize:20,color:'var(--mu)',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={s.cb}>
+            {ef('op','Operation name')}
+            {ef('field_name','Field name')}
+            {ef('hybrid','Hybrid')}
+            {ef('acres','Acres planted',{type:'number',inputMode:'decimal'})}
+            {ef('zip','Zip code',{inputMode:'numeric'})}
+            {ef('loc','Field location')}
+            {ef('plant_date','Plant date',{type:'date'})}
+            {ef('pop','Population (seeds/ac)',{type:'number',inputMode:'numeric'})}
+            {ef('stand_e','Stand emerged (plants/ac)',{type:'number',inputMode:'numeric'})}
+            {ef('tillage','Tillage')}
+            {ef('pcond','Planting conditions')}
+            {ef('emerge','Emergence rating')}
+            {ef('weed_pre','Weed pre-plant',{textarea:true})}
+            {ef('weed_post','Weed post-plant',{textarea:true})}
+            {ef('fplanned','Fungicide planned')}
+            {ef('ftiming','Fungicide timing')}
+            {ef('fproduct','Fungicide product',{textarea:true})}
+            {ef('notes','Notes',{textarea:true})}
+            <button style={s.btn} onClick={saveEdit} disabled={saving}>
+              {saving?'Saving…':'Save changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{background:'var(--g)',borderRadius:16,padding:16,marginBottom:12,color:'#fff'}}>
         <div style={{fontSize:20,fontWeight:700}}>{field.op}</div>
         <div style={{fontSize:13,opacity:0.85,marginTop:3}}>{field.hybrid||'—'} · {field.loc||'—'}</div>
