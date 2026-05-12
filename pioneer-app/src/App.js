@@ -385,38 +385,39 @@ function LocMapPicker({ onPick, initLat, initLng }) {
   const markerRef = useRef(null)
 
   useEffect(()=>{
+    if(!mapRef.current) return
     const L = window.L
-    if(!mapObj.current){
-      const startLat = initLat || 41.5
-      const startLng = initLng || -93.5
-      mapObj.current = L.map('loc-map', { zoomControl:true }).setView([startLat, startLng], initLat ? 16 : 13)
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(mapObj.current)
+    if(mapObj.current){ mapObj.current.remove(); mapObj.current=null }
+    const startLat = initLat || 41.5
+    const startLng = initLng || -93.5
+    mapObj.current = L.map(mapRef.current, { zoomControl:true }).setView([startLat, startLng], initLat ? 16 : 13)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(mapObj.current)
 
-      // Try to go to user location
-      if(!initLat){
-        navigator.geolocation.getCurrentPosition(pos=>{
-          mapObj.current.setView([pos.coords.latitude, pos.coords.longitude], 15)
-        },()=>{},{enableHighAccuracy:true})
-      }
-
-      // Place existing pin if any
-      if(initLat){
-        const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
-        markerRef.current = L.marker([initLat,initLng],{icon}).addTo(mapObj.current)
-      }
-
-      mapObj.current.on('click', function(e){
-        const {lat,lng} = e.latlng
-        if(markerRef.current) mapObj.current.removeLayer(markerRef.current)
-        const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
-        markerRef.current = L.marker([lat,lng],{icon}).addTo(mapObj.current)
-        onPick(lat,lng)
-      })
+    if(!initLat){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        if(mapObj.current) mapObj.current.setView([pos.coords.latitude, pos.coords.longitude], 16)
+      },()=>{},{enableHighAccuracy:true})
     }
+
+    if(initLat){
+      const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+      markerRef.current = L.marker([initLat,initLng],{icon}).addTo(mapObj.current)
+    }
+
+    mapObj.current.on('click', function(e){
+      const {lat,lng} = e.latlng
+      if(markerRef.current) mapObj.current.removeLayer(markerRef.current)
+      const icon = L.divIcon({html:'<div style="font-size:28px;line-height:1">📍</div>',className:'',iconSize:[28,28],iconAnchor:[14,28]})
+      markerRef.current = L.marker([lat,lng],{icon}).addTo(mapObj.current)
+      onPick(lat,lng)
+    })
+
+    setTimeout(()=>{ if(mapObj.current) mapObj.current.invalidateSize() }, 100)
+
     return ()=>{ if(mapObj.current){ mapObj.current.remove(); mapObj.current=null } }
   },[])
 
-  return null
+  return <div ref={mapRef} style={{flex:1,minHeight:200}} />
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -497,7 +498,6 @@ function EntryTab({ onSaved, showToast }) {
                 </div>
                 <button onClick={()=>setShowLocMap(false)} style={{background:'var(--g)',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontWeight:600,cursor:'pointer',fontSize:14}}>Done</button>
               </div>
-              <div id="loc-map" style={{flex:1}} />
               <LocMapPicker
                 onPick={(lat,lng)=>{ set('loc_lat',lat); set('loc_lng',lng) }}
                 initLat={form.loc_lat} initLng={form.loc_lng}
