@@ -721,7 +721,8 @@ function PhotosTab({ fields, showToast }) {
       const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
         const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
-        window.location.href=`sms:7656693258?body=${msg}`
+        const nums = contacts.map(c=>c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
+        window.location.href=`sms:${nums}?body=${msg}`
       }
     }
   }
@@ -899,7 +900,8 @@ function ScoutTab({ fields, showToast }) {
       const contacts = getContacts(fdata)
       if (contacts.length > 0) {
         const msg = encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${cat||'Other'})${notes?' — '+notes:''}. View: https://pioneer-scouting-tool.vercel.app`)
-        window.location.href = `sms:7656693258?body=${msg}`
+        const nums = contacts.map(c=>c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
+        window.location.href = `sms:${nums}?body=${msg}`
       }
     }
   }
@@ -1047,7 +1049,8 @@ function VisitNotesTab({ fields, showToast }) {
       const contacts = getContacts(selectedField)
       if(contacts.length > 0){
         const msg=encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${savedNote} — View in app: https://pioneer-scouting-tool.vercel.app`)
-        setSmsData(`sms:7656693258?body=${msg}`)
+        const nums = contacts.map(c=>c.phone.replace(/\D/g,'')).filter(Boolean).join(',')
+        setSmsData(`sms:${nums}?body=${msg}`)
       }
     }
   }
@@ -1102,7 +1105,8 @@ function VisitNotesTab({ fields, showToast }) {
               {(() => {
                 const hasContacts = selectedField && getContacts(selectedField).length > 0
                 const msgText = selectedField ? `Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app` : ''
-                const smsHref = hasContacts ? `sms:7656693258?body=${encodeURIComponent(msgText)}` : null
+                const nums = hasContacts ? getContacts(selectedField).map(c=>c.phone.replace(/\D/g,'')).filter(Boolean).join(',') : ''
+                const smsHref = nums ? `sms:${nums}?body=${encodeURIComponent(msgText)}` : null
                 return smsHref ? (
                   <a href={smsHref} onClick={()=>{ if(note.trim()) saveNote() }}
                     style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:'var(--g)',color:'#fff',borderRadius:12,padding:15,fontSize:15,fontWeight:600,textDecoration:'none',opacity:saving?0.6:1}}>
