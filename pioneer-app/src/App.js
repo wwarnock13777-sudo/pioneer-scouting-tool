@@ -633,7 +633,7 @@ function PhotosTab({ fields, showToast }) {
     const fdata=fields.find(f=>f.id===fieldId)
     if(fdata){
       const contacts = getContacts(fdata)
-      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. Check the Pioneer Field Tracker app for details.`)
+      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New photo logged on ${date||TODAY}${note?' — '+note:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
         const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
         window.location.href=`sms:${nums}?body=${msg}`
@@ -892,7 +892,7 @@ function ScoutTab({ fields, showToast }) {
     if(fdata){
       const contacts = getContacts(fdata)
       const catLabel=cat||'Other'
-      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. Check the Pioneer Field Tracker app for details.`)
+      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
         const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
         window.location.href=`sms:${nums}?body=${msg}`
@@ -1073,7 +1073,7 @@ function VisitNotesTab({ fields, showToast }) {
     // Text all contacts
     if (selectedField) {
       const contacts = getContacts(selectedField)
-      const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()}`)
+      const msg = encodeURIComponent(`Field visit note for ${selectedField.op}${selectedField.field_name?' — '+selectedField.field_name:''} on ${date}: ${note.trim()} — View in app: https://pioneer-scouting-tool.vercel.app`)
       if(contacts.length>0){
         const nums=contacts.map(c=>c.phone.replace(/\D/g,'')).join(',')
         setTimeout(()=>{ window.location.href=`sms:${nums}?body=${msg}` }, 1000)
