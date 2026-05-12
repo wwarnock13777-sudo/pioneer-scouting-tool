@@ -620,9 +620,13 @@ function PhotosTab({ fields, showToast }) {
   useEffect(()=>{if(fieldId)load()},[fieldId])
   async function load(){const{data}=await supabase.from('photos').select('*').eq('field_id',fieldId).order('log_date',{ascending:false});setPhotos(data||[])}
   function handleFile(e){const file=e.target.files[0];if(!file)return;compress(file,1200,0.7,data=>setPreview(data))}
+  const [saving,setSaving]=useState(false)
   async function save(){
     if(!preview){showToast('Take or choose a photo first');return}
+    if(saving)return
+    setSaving(true)
     const{error}=await supabase.from('photos').insert([{field_id:fieldId,log_date:date,note,src:preview}])
+    setSaving(false)
     if(error){showToast('Save failed: '+error.message);return}
     setPreview(null);setNote('');setDate(TODAY);load();showToast('Photo saved!')
     // Auto-text all contacts
@@ -647,18 +651,18 @@ function PhotosTab({ fields, showToast }) {
               <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:18,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
                 <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                 <p style={{fontSize:13,color:'var(--mu)',fontWeight:500}}>Take photo</p>
-                <input type="file" accept="image/*" capture="environment" onChange={handleFile} style={{display:'none'}} />
+                <input type="file" accept="image/*" capture="environment" onChange={e=>{handleFile(e);e.target.value=''}} style={{display:'none'}} />
               </label>
               <label style={{border:'2px dashed var(--bdr)',borderRadius:12,padding:18,textAlign:'center',cursor:'pointer',background:'#fafaf7',display:'block'}}>
                 <svg viewBox="0 0 24 24" width="28" height="28" stroke="var(--mu)" fill="none" strokeWidth="1.5" style={{display:'block',margin:'0 auto 8px'}}><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M3 9h4l2-2h6l2 2h4"/></svg>
                 <p style={{fontSize:13,color:'var(--mu)',fontWeight:500}}>Camera roll</p>
-                <input type="file" accept="image/*" onChange={handleFile} style={{display:'none'}} />
+                <input type="file" accept="image/*" onChange={e=>{handleFile(e);e.target.value=''}} style={{display:'none'}} />
               </label>
             </div>
             {preview&&<img src={preview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}} />}
             <div style={s.fg}><label style={s.lbl}>Notes / observation</label><textarea style={s.ta} rows="2" value={note} onChange={e=>setNote(e.target.value)} placeholder="What are you seeing?" /></div>
             <div style={s.fg}><label style={s.lbl}>Date</label><input style={s.inp} type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
-            <button style={s.btn} onClick={save}>Save photo</button>
+            <button style={{...s.btn,opacity:saving?0.6:1}} onClick={save} disabled={saving}>{saving?'Saving…':'Save photo'}</button>
           </div>
         </div>
         <div style={s.card}>
