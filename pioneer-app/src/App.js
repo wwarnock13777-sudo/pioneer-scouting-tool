@@ -922,7 +922,7 @@ function ScoutTab({ fields, showToast }) {
           <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
         </button>
         <div style={{display:mapOpen?'block':'none',border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden'}}>
-          <div ref={mapRef} style={{width:'100%',height:'45vh'}} />
+          <div ref={mapRef} style={{width:'100%',height:modal?'25vh':'45vh'}} />
         </div>
       </div>
 
@@ -987,10 +987,11 @@ function ScoutTab({ fields, showToast }) {
             <h3 style={{fontSize:16,fontWeight:600,marginBottom:4}}>New scout pin</h3>
             {currentHybrid&&<div style={{fontSize:13,color:'#2979ff',fontWeight:500,marginBottom:12}}>📍 Dropping in: {currentHybrid}</div>}
             <label style={s.lbl}>Category</label>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,margin:'6px 0 14px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,margin:'6px 0 14px'}}>
               {cats.map(c=>(
-                <button key={c} onClick={()=>setCat(c)} style={{border:cat===c?'1px solid var(--g)':'1px solid var(--bdr)',borderRadius:9,padding:'9px 6px',fontSize:12,fontWeight:500,background:cat===c?'var(--gl)':'#f8f8f5',cursor:'pointer',textAlign:'center',color:cat===c?'var(--gd)':undefined}}>
-                  {em[c]} {c}
+                <button key={c} onClick={()=>setCat(c)} style={{border:cat===c?'2px solid var(--g)':'1px solid var(--bdr)',borderRadius:12,padding:'14px 6px',fontSize:13,fontWeight:600,background:cat===c?'var(--gl)':'#f8f8f5',cursor:'pointer',textAlign:'center',color:cat===c?'var(--gd)':'var(--tx)',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:22}}>{em[c]}</span>
+                  <span>{c}</span>
                 </button>
               ))}
             </div>
