@@ -714,206 +714,222 @@ function PhotosTab({ fields, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCOUT — satellite map, auto blue dot, shapefile, camera roll
+// SCOUT TAB — satellite map, GPS blue dot, drop pins
 // ══════════════════════════════════════════════════════════════════════════════
 function ScoutTab({ fields, showToast }) {
-  const [fieldId,setFieldId]=useState('')
-  const [pins,setPins]=useState([])
-  const [modal,setModal]=useState(false)
-  const [pending,setPending]=useState(null)
-  const [cat,setCat]=useState('');const [notes,setNotes]=useState('');const [pinPhoto,setPinPhoto]=useState(null)
-  const [mapOpen,setMapOpen]=useState(true)
-  const mapRef=useRef(null);const mapObj=useRef(null);const markers=useRef([])
-  const locMarker=useRef(null);const pathLine=useRef(null)
-  const pathPts=useRef([]);const watchId=useRef(null)
+  const [fieldId, setFieldId] = useState('')
+  const [pins, setPins] = useState([])
+  const [showForm, setShowForm] = useState(false)
+  const [pending, setPending] = useState(null)
+  const [cat, setCat] = useState('')
+  const [notes, setNotes] = useState('')
+  const [pinPhoto, setPinPhoto] = useState(null)
+  const mapRef = useRef(null)
+  const mapObj = useRef(null)
+  const markersRef = useRef([])
+  const locMarkerRef = useRef(null)
+  const pathPtsRef = useRef([])
+  const pathLineRef = useRef(null)
+  const watchRef = useRef(null)
 
-  useEffect(()=>{
-    if(!mapObj.current){
-      const L=window.L
-      mapObj.current=L.map(mapRef.current,{zoomControl:true}).setView([41.5,-93.5],13)
-      // SATELLITE TILE LAYER
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(mapObj.current)
+  const cats = ['Disease','Weed','Pest','Nutrient','Water','Other']
+  const em = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
+
+  // Init map once
+  useEffect(() => {
+    const L = window.L
+    if (!mapObj.current && mapRef.current) {
+      mapObj.current = L.map(mapRef.current, { zoomControl:true }).setView([41.5, -93.5], 13)
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Tiles © Esri' }).addTo(mapObj.current)
     }
-    startTracking()
-    setTimeout(()=>{ if(mapObj.current) mapObj.current.invalidateSize() }, 200)
-    return()=>{if(watchId.current)navigator.geolocation.clearWatch(watchId.current)}
-  },[])
-
-  useEffect(()=>{if(fieldId)loadPins()},[fieldId])
-  useEffect(()=>{renderMarkers()},[pins])
-
-  function startTracking(){
-    try {
-    const L=window.L
-    if(!L){console.warn('Leaflet not loaded');return}
-    if(watchId.current)navigator.geolocation.clearWatch(watchId.current)
-    watchId.current=navigator.geolocation.watchPosition(pos=>{
-      try {
-      const{latitude:lat,longitude:lng}=pos.coords
-      if(!locMarker.current){
-        const dotIcon=L.divIcon({html:`<div style="width:18px;height:18px;background:#2979ff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(41,121,255,0.8)"></div>`,className:'',iconSize:[18,18],iconAnchor:[9,9]})
-        locMarker.current=L.marker([lat,lng],{icon:dotIcon,zIndexOffset:1000}).addTo(mapObj.current)
-        mapObj.current.setView([lat,lng],16)
-      } else {
-        locMarker.current.setLatLng([lat,lng])
-      }
-      pathPts.current.push([lat,lng])
-      if(pathLine.current)mapObj.current.removeLayer(pathLine.current)
-      if(pathPts.current.length>1){
-        pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.7}).addTo(mapObj.current)
-      }
-      checkZone(lat,lng)
-      } catch(e){ console.error('tracking error:',e) }
-    },()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:15000})
-    } catch(e){ console.error('startTracking error:',e) }
-  }
-
-  function checkZone(lat,lng){
-    if(!zones.length){setCurrentHybrid(null);return}
-    const L=window.L
-    const pt=L.latLng(lat,lng)
-    for(let z of zones){
-      if(z.layer&&z.layer.getBounds&&z.layer.getBounds().contains(pt)){
-        setCurrentHybrid(z.hybrid);return
-      }
+    // Start GPS
+    if (navigator.geolocation) {
+      watchRef.current = navigator.geolocation.watchPosition(pos => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        const L = window.L
+        if (!mapObj.current) return
+        if (!locMarkerRef.current) {
+          const icon = L.divIcon({ html:'<div style="width:18px;height:18px;background:#2979ff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(41,121,255,0.8)"></div>', className:'', iconSize:[18,18], iconAnchor:[9,9] })
+          locMarkerRef.current = L.marker([lat, lng], { icon, zIndexOffset:1000 }).addTo(mapObj.current)
+          mapObj.current.setView([lat, lng], 16)
+        } else {
+          locMarkerRef.current.setLatLng([lat, lng])
+        }
+        pathPtsRef.current.push([lat, lng])
+        if (pathLineRef.current) mapObj.current.removeLayer(pathLineRef.current)
+        if (pathPtsRef.current.length > 1) {
+          pathLineRef.current = L.polyline(pathPtsRef.current, { color:'#2979ff', weight:3, opacity:0.7 }).addTo(mapObj.current)
+        }
+      }, () => {}, { enableHighAccuracy:true, maximumAge:3000, timeout:20000 })
     }
-    setCurrentHybrid(null)
-  }
+    return () => {
+      if (watchRef.current) navigator.geolocation.clearWatch(watchRef.current)
+    }
+  }, [])
 
-  async function loadPins(){
-    const{data}=await supabase.from('scout_pins').select('*').eq('field_id',fieldId).order('log_date',{ascending:false})
-    setPins(data||[])
-  }
+  // Load pins when field selected
+  useEffect(() => {
+    if (fieldId) loadPins()
+  }, [fieldId])
 
-  function renderMarkers(){
-    const L=window.L;if(!mapObj.current||!L)return
-    markers.current.forEach(m=>mapObj.current.removeLayer(m));markers.current=[]
-    const em={Disease:'🌿',Weed:'🌱',Pest:'🐛',Nutrient:'🌾',Water:'💧',Other:'📍'}
-    pins.forEach(p=>{
-      const icon=L.divIcon({html:`<div style="font-size:24px;line-height:1">${em[p.cat]||'📍'}</div>`,className:'',iconSize:[28,28],iconAnchor:[14,28]})
-      const m=L.marker([p.lat,p.lng],{icon}).addTo(mapObj.current)
-      m.bindPopup(`<div style="min-width:180px;padding:8px"><strong>${p.cat||'Pin'}</strong><br/><small>${p.log_date}</small><p style="margin-top:4px;font-size:13px">${p.notes||''}</p>${p.photo?`<img src="${p.photo}" style="width:100%;border-radius:6px;margin-top:6px;max-height:100px;object-fit:cover">`:''}
-<a href="https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d" target="_blank" style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:#007aff;color:#fff;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;">🗺 Directions</a></div>`,{maxWidth:220})
-      markers.current.push(m)
+  // Render pin markers when pins change
+  useEffect(() => {
+    if (!mapObj.current) return
+    const L = window.L
+    markersRef.current.forEach(m => mapObj.current.removeLayer(m))
+    markersRef.current = []
+    pins.forEach(p => {
+      const icon = L.divIcon({ html:`<div style="font-size:24px;line-height:1">${em[p.cat]||'📍'}</div>`, className:'', iconSize:[28,28], iconAnchor:[14,28] })
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(mapObj.current)
+      m.bindPopup(`<div style="padding:8px;min-width:160px"><strong>${p.cat||'Pin'}</strong><br/><small>${p.log_date}</small>${p.notes?`<p style="margin-top:4px;font-size:13px">${p.notes}</p>`:''}<br/><a href="https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d" style="display:inline-block;margin-top:8px;background:#007aff;color:#fff;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none">🗺 Directions</a></div>`, { maxWidth:220 })
+      markersRef.current.push(m)
     })
+  }, [pins])
+
+  async function loadPins() {
+    const { data } = await supabase.from('scout_pins').select('*').eq('field_id', fieldId).order('log_date', { ascending:false })
+    setPins(data || [])
   }
 
-
-  function dropPin(){
-    if(!fieldId){showToast('Select a field first');return}
-    navigator.geolocation.getCurrentPosition(pos=>{
-      setPending({lat:pos.coords.latitude,lng:pos.coords.longitude})
-      setCat('');setNotes('');setPinPhoto(null);setModal(true)
-    },(err)=>{
-      showToast('Enable location access in Settings → Safari → Location')
-    },{enableHighAccuracy:true,timeout:15000,maximumAge:0})
+  function handleDropPin() {
+    if (!fieldId) { showToast('Select a field first'); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setPending({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setCat(''); setNotes(''); setPinPhoto(null)
+        setShowForm(true)
+      },
+      () => showToast('Turn on location in Settings → Safari → Location'),
+      { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+    )
   }
 
-  async function savePin(){
-    if(!notes&&!cat){showToast('Add a category or notes');return}
-    await supabase.from('scout_pins').insert([{field_id:fieldId,lat:pending.lat,lng:pending.lng,cat:cat||'Other',notes,log_date:TODAY,photo:pinPhoto}])
-    setModal(false);loadPins();showToast('Pin dropped!')
-    // Auto-text all contacts
-    const fdata=fields.find(f=>f.id===fieldId)
-    if(fdata){
+  async function handleSavePin() {
+    if (!cat && !notes) { showToast('Pick a category or add notes'); return }
+    const { error } = await supabase.from('scout_pins').insert([{
+      field_id: fieldId,
+      lat: pending.lat,
+      lng: pending.lng,
+      cat: cat || 'Other',
+      notes,
+      log_date: TODAY,
+      photo: pinPhoto,
+    }])
+    if (error) { showToast('Save failed: ' + error.message); return }
+    setShowForm(false)
+    loadPins()
+    showToast('Pin saved!')
+    // Fly map to pin
+    if (mapObj.current) mapObj.current.setView([pending.lat, pending.lng], 17)
+    // SMS
+    const fdata = fields.find(f => f.id === fieldId)
+    if (fdata) {
       const contacts = getContacts(fdata)
-      const catLabel=cat||'Other'
-      const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${catLabel})${notes?' — '+notes:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
-      if(contacts.length>0){
-        const msg=encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${cat||'Other'})${notes?' — '+notes:''}. View in app: https://pioneer-scouting-tool.vercel.app`)
-        window.location.href=`sms:7656693258?body=${msg}`
+      if (contacts.length > 0) {
+        const msg = encodeURIComponent(`Field update for ${fdata.op}${fdata.field_name?' — '+fdata.field_name:''}: New scout pin (${cat||'Other'})${notes?' — '+notes:''}. View: https://pioneer-scouting-tool.vercel.app`)
+        window.location.href = `sms:7656693258?body=${msg}`
       }
     }
   }
 
-  const cats=['Disease','Weed','Pest','Nutrient','Water','Other']
-  const em={Disease:'🌿',Weed:'🌱',Pest:'🐛',Nutrient:'🌾',Water:'💧',Other:'📍'}
+  function handleClearPath() {
+    if (pathLineRef.current && mapObj.current) mapObj.current.removeLayer(pathLineRef.current)
+    pathLineRef.current = null
+    pathPtsRef.current = []
+    showToast('Path cleared')
+  }
 
   return (
     <div style={s.view}>
       <FieldSelect fields={fields} value={fieldId} onChange={setFieldId} />
 
-
-
-      <div style={{marginBottom:10}}>
-        <button onClick={()=>{ setMapOpen(o=>{ const next=!o; if(next && mapObj.current) setTimeout(()=>mapObj.current.invalidateSize(),50); return next }) }} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
-          <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span>Satellite map</span>
-          <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
-        </button>
-        <div style={{border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden',height:mapOpen?'45vh':'0px',transition:'height 0.2s'}}>
-          <div ref={mapRef} style={{width:'100%',height:'45vh'}} />
-        </div>
+      {/* Map */}
+      <div style={{ border:'1px solid var(--bdr)', borderRadius:14, overflow:'hidden', marginBottom:10 }}>
+        <div ref={mapRef} style={{ width:'100%', height:'42vh' }} />
       </div>
 
-
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-        <button style={s.btn} onClick={dropPin}>
+      {/* Buttons */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
+        <button style={s.btn} onClick={handleDropPin}>
           <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           Drop pin
         </button>
-        <button style={{...s.btn,background:'#607d8b'}} onClick={()=>{if(pathLine.current){mapObj.current.removeLayer(pathLine.current);pathLine.current=null}pathPts.current=[];showToast('Path cleared')}}>
+        <button style={{ ...s.btn, background:'#607d8b' }} onClick={handleClearPath}>
           <svg viewBox="0 0 24 24" width="15" height="15" stroke="#fff" fill="none" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
           Clear path
         </button>
       </div>
 
-      <div style={s.card}>
-        <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Scout pins ({pins.length})</span></div>
-        <div style={{padding:'4px 14px'}}>
-          {!pins.length?<div style={{...s.empty,padding:20}}>No pins dropped yet</div>:pins.map(p=>(
-            <div key={p.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--bdr)'}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:600}}>{em[p.cat]||'📍'} {p.cat||'Pin'}</div>
-                <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{p.log_date} · {Number(p.lat).toFixed(4)}, {Number(p.lng).toFixed(4)}</div>
-                <div style={{fontSize:13,marginTop:3}}>{p.notes}</div>
-                <a href={`https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d`} style={{display:'inline-flex',alignItems:'center',gap:5,marginTop:6,background:'#007aff',color:'#fff',padding:'5px 10px',borderRadius:8,fontSize:12,fontWeight:600,textDecoration:'none'}}>🗺 Directions</a>
+      {/* Pin form — shown inline after drop pin */}
+      {showForm && pending && (
+        <div style={{ ...s.card, border:'2px solid var(--g)', marginBottom:14 }}>
+          <div style={{ ...s.ch, justifyContent:'space-between' }}>
+            <span style={{ fontSize:14, fontWeight:600 }}>New scout pin</span>
+            <button onClick={() => setShowForm(false)} style={{ background:'none', border:'none', fontSize:20, color:'var(--mu)', cursor:'pointer', padding:'0 4px' }}>✕</button>
+          </div>
+          <div style={s.cb}>
+            <div style={{ fontSize:12, color:'var(--mu)' }}>📍 {pending.lat.toFixed(5)}, {pending.lng.toFixed(5)}</div>
+            <div style={s.fg}>
+              <label style={s.lbl}>Category</label>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+                {cats.map(c => (
+                  <button key={c} onClick={() => setCat(c)} style={{ border: cat===c ? '2px solid var(--g)' : '1px solid var(--bdr)', borderRadius:12, padding:'12px 4px', fontSize:12, fontWeight:600, background: cat===c ? 'var(--gl)' : '#f8f8f5', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:4, color: cat===c ? 'var(--gd)' : 'var(--tx)' }}>
+                    <span style={{ fontSize:20 }}>{em[c]}</span>
+                    <span>{c}</span>
+                  </button>
+                ))}
               </div>
-              <DelBtn onClick={async()=>{if(!window.confirm('Delete?'))return;await supabase.from('scout_pins').delete().eq('id',p.id);loadPins()}} />
+            </div>
+            <div style={s.fg}>
+              <label style={s.lbl}>Notes</label>
+              <textarea style={s.ta} rows="3" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Describe what you're seeing…" />
+            </div>
+            <div style={s.fg}>
+              <label style={s.lbl}>Photo (optional)</label>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                <label style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, cursor:'pointer', background:'#f8f8f5', border:'1px solid var(--bdr)', borderRadius:10, padding:'10px 6px', textAlign:'center' }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span style={{ fontSize:11, color:'var(--mu)' }}>Take photo</span>
+                  <input type="file" accept="image/*" capture="environment" onChange={e => { const f=e.target.files[0]; if(!f)return; compress(f,800,0.65,d=>setPinPhoto(d)) }} style={{ display:'none' }} />
+                </label>
+                <label style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, cursor:'pointer', background:'#f8f8f5', border:'1px solid var(--bdr)', borderRadius:10, padding:'10px 6px', textAlign:'center' }}>
+                  <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M3 9h4l2-2h6l2 2h4"/></svg>
+                  <span style={{ fontSize:11, color:'var(--mu)' }}>Camera roll</span>
+                  <input type="file" accept="image/*" onChange={e => { const f=e.target.files[0]; if(!f)return; compress(f,800,0.65,d=>setPinPhoto(d)) }} style={{ display:'none' }} />
+                </label>
+              </div>
+              {pinPhoto && <img src={pinPhoto} alt="preview" style={{ width:'100%', height:100, objectFit:'cover', borderRadius:8, marginTop:6 }} />}
+            </div>
+            <button style={s.btn} onClick={handleSavePin}>Save pin</button>
+          </div>
+        </div>
+      )}
+
+      {/* Pin list */}
+      <div style={s.card}>
+        <div style={s.ch}>
+          <div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+          <span style={{ fontSize:13, fontWeight:600 }}>Scout pins ({pins.length})</span>
+        </div>
+        <div style={{ padding:'4px 14px 8px' }}>
+          {!pins.length ? <div style={{ ...s.empty, padding:16 }}>No pins dropped yet</div> : pins.map(p => (
+            <div key={p.id} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 0', borderBottom:'1px solid var(--bdr)' }}>
+              <span style={{ fontSize:22 }}>{em[p.cat]||'📍'}</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:600 }}>{p.cat||'Pin'} <span style={{ color:'var(--mu)', fontWeight:400, fontSize:12 }}>· {p.log_date}</span></div>
+                {p.notes && <div style={{ fontSize:13, marginTop:2 }}>{p.notes}</div>}
+                <div style={{ fontSize:11, color:'var(--hi)', marginTop:2 }}>{Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)}</div>
+                <a href={`https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d`} style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:6, background:'#007aff', color:'#fff', padding:'5px 10px', borderRadius:8, fontSize:12, fontWeight:600, textDecoration:'none' }}>🗺 Directions</a>
+                {p.photo && <img src={p.photo} alt="pin" style={{ width:'100%', borderRadius:8, marginTop:6, maxHeight:120, objectFit:'cover' }} />}
+              </div>
+              <DelBtn onClick={async () => { if(!window.confirm('Delete?'))return; await supabase.from('scout_pins').delete().eq('id',p.id); loadPins() }} />
             </div>
           ))}
         </div>
       </div>
-
-      {modal&&(
-        <div style={{background:'var(--card)',border:'1px solid var(--g)',borderRadius:14,padding:'16px',marginBottom:12}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-              <h3 style={{fontSize:16,fontWeight:600}}>New scout pin</h3>
-              <button onClick={()=>setModal(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'var(--mu)'}}>✕</button>
-            </div>
-            {currentHybrid&&<div style={{fontSize:13,color:'#2979ff',fontWeight:500,marginBottom:12}}>📍 Dropping in: {currentHybrid}</div>}
-            <label style={s.lbl}>Category</label>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,margin:'6px 0 14px'}}>
-              {cats.map(c=>(
-                <button key={c} onClick={()=>setCat(c)} style={{border:cat===c?'2px solid var(--g)':'1px solid var(--bdr)',borderRadius:12,padding:'14px 6px',fontSize:13,fontWeight:600,background:cat===c?'var(--gl)':'#f8f8f5',cursor:'pointer',textAlign:'center',color:cat===c?'var(--gd)':'var(--tx)',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-                  <span style={{fontSize:22}}>{em[c]}</span>
-                  <span>{c}</span>
-                </button>
-              ))}
-            </div>
-            <div style={{...s.fg,marginBottom:11}}><label style={s.lbl}>Notes</label><textarea style={s.ta} rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Describe what you're seeing…" /></div>
-            <div style={{...s.fg,marginBottom:11}}>
-              <label style={s.lbl}>Photo (optional)</label>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                <label style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
-                  <svg viewBox="0 0 24 24" width="22" height="22" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  <span style={{fontSize:12,color:'var(--mu)'}}>Take photo</span>
-                  <input type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;compress(f,800,0.65,d=>setPinPhoto(d))}} style={{display:'none'}} />
-                </label>
-                <label style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,cursor:'pointer',background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
-                  <svg viewBox="0 0 24 24" width="22" height="22" stroke="var(--mu)" fill="none" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M3 9h4l2-2h6l2 2h4"/></svg>
-                  <span style={{fontSize:12,color:'var(--mu)'}}>Camera roll</span>
-                  <input type="file" accept="image/*" onChange={e=>{const f=e.target.files[0];if(!f)return;compress(f,800,0.65,d=>setPinPhoto(d))}} style={{display:'none'}} />
-                </label>
-              </div>
-              {pinPhoto&&<img src={pinPhoto} alt="preview" style={{width:'100%',height:120,objectFit:'cover',borderRadius:9,marginTop:8}} />}
-            </div>
-            <button style={{...s.btn,marginBottom:10}} onClick={savePin}>Save pin</button>
-        </div>
-      )}
     </div>
   )
 }
-
 
 // ══════════════════════════════════════════════════════════════════════════════
 // VISIT NOTES TAB
