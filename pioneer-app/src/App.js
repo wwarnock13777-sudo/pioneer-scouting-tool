@@ -424,7 +424,7 @@ function LocMapPicker({ onPick, initLat, initLng }) {
 // ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
 function EntryTab({ onSaved, showToast }) {
-  const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
+  const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', acres:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
   const [showLocMap, setShowLocMap] = useState(false)
   const [mapReady, setMapReady] = useState(false)
   const [sel, setSel] = useState({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
@@ -458,7 +458,7 @@ function EntryTab({ onSaved, showToast }) {
     if (newField && form.plant_date && form.zip) {
       backfillWeather(newField.id, form.plant_date, form.zip, showToast)
     }
-    setForm({ op:'', field_name:'', hybrid:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
+    setForm({ op:'', field_name:'', hybrid:'', acres:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
     setShowLocMap(false)
     setSel({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   }
@@ -477,6 +477,7 @@ function EntryTab({ onSaved, showToast }) {
           <div style={s.fg}><label style={s.lbl}>Operation name</label><input style={s.inp} value={form.op} onChange={e=>set('op',e.target.value)} placeholder="Farm / operation name" /></div>
           <div style={s.fg}><label style={s.lbl}>Field name</label><input style={s.inp} value={form.field_name} onChange={e=>set('field_name',e.target.value)} placeholder="e.g. North 40, Home Farm, River Field" /></div>
           <div style={s.fg}><label style={s.lbl}>Hybrid planted</label><input style={s.inp} value={form.hybrid} onChange={e=>set('hybrid',e.target.value)} placeholder="Hybrid number" /></div>
+          <div style={s.fg}><label style={s.lbl}>Acres planted</label><input style={s.inp} type="number" value={form.acres} onChange={e=>set('acres',e.target.value)} placeholder="e.g. 120" inputMode="decimal" /></div>
           <div style={s.fg}><label style={s.lbl}>Field zip code</label><input style={s.inp} value={form.zip} onChange={e=>set('zip',e.target.value)} placeholder="5-digit zip" inputMode="numeric" maxLength={5} /></div>
 
           {/* Field location — drop pin on map */}
@@ -1391,7 +1392,7 @@ function ReportsTab({ fields, showToast }) {
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
                 <thead>
                   <tr style={{background:'#f8f8f5'}}>
-                    {['Field','Hybrid','Tillage','Population','Rain"','Yield bu/ac'].map(h=>(
+                    {['Field','Hybrid','Acres','Tillage','Population','Rain"','Yield bu/ac'].map(h=>(
                       <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'var(--mu)',borderBottom:'1px solid var(--bdr)',whiteSpace:'nowrap'}}>{h}</th>
                     ))}
                   </tr>
@@ -1406,6 +1407,7 @@ function ReportsTab({ fields, showToast }) {
                       <tr key={f.id} style={{borderBottom:'1px solid #f5f5f0'}}>
                         <td style={{padding:'8px 10px',fontWeight:600}}>{anonymize?`Field ${i+1}`:(f.field_name||f.op)}</td>
                         <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.hybrid||'—'}</td>
+                        <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.acres||'—'}</td>
                         <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.tillage||'—'}</td>
                         <td style={{padding:'8px 10px',color:'var(--mu)'}}>{f.pop||'—'}</td>
                         <td style={{padding:'8px 10px',color:'#0c447c',fontWeight:600}}>{totalR}"</td>
@@ -1510,7 +1512,7 @@ function ReportsTab({ fields, showToast }) {
                         <div>
                           <div style={{fontSize:14,fontWeight:600}}>{anonymize?`Grower ${i+1}`:(f.op)}</div>
                           <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{anonymize?`Field ${i+1}`:(f.field_name||'—')} · {f.plant_date||'—'}</div>
-                          <div style={{fontSize:12,color:'var(--mu)',marginTop:1}}>Pop: {f.pop||'—'} · Tillage: {f.tillage||'—'} · Rain: {totalR}"</div>
+                          <div style={{fontSize:12,color:'var(--mu)',marginTop:1}}>Acres: {f.acres||'—'} · Pop: {f.pop||'—'} · Tillage: {f.tillage||'—'} · Rain: {totalR}"</div>
                         </div>
                         <div style={{textAlign:'right'}}>
                           {avgY ? <div style={{fontSize:20,fontWeight:700,color:'var(--g)'}}>{avgY}<span style={{fontSize:12,fontWeight:400,color:'var(--mu)'}}> bu/ac</span></div> : <div style={{fontSize:13,color:'var(--hi)'}}>No yield</div>}
@@ -1519,17 +1521,34 @@ function ReportsTab({ fields, showToast }) {
                     </div>
                   )
                 })}
-                {hybridFields.some(f=>allYields.some(y=>y.field_id===f.id)) && (
-                  <div style={{marginTop:12,padding:'10px 12px',background:'var(--gl)',borderRadius:10}}>
-                    <div style={{fontSize:12,color:'var(--mu)',fontWeight:600,marginBottom:4}}>HYBRID AVERAGE</div>
-                    <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>
-                      {(() => {
-                        const allHY = hybridFields.flatMap(f=>allYields.filter(y=>y.field_id===f.id).map(y=>Number(y.yield_buac)))
-                        return allHY.length ? (allHY.reduce((a,b)=>a+b,0)/allHY.length).toFixed(1)+' bu/ac avg across '+allHY.length+' field'+(allHY.length!==1?'s':'') : '—'
-                      })()}
+                {(() => {
+                  const totalAcres = hybridFields.reduce((a,f)=>a+Number(f.acres||0),0)
+                  const allHY = hybridFields.flatMap(f=>allYields.filter(y=>y.field_id===f.id).map(y=>Number(y.yield_buac)))
+                  const avgYield = allHY.length ? (allHY.reduce((a,b)=>a+b,0)/allHY.length).toFixed(1) : null
+                  return (
+                    <div style={{marginTop:12,padding:'12px 14px',background:'var(--gl)',borderRadius:10}}>
+                      <div style={{fontSize:11,color:'var(--mu)',fontWeight:600,marginBottom:8,letterSpacing:'0.04em',textTransform:'uppercase'}}>Hybrid summary</div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                        <div>
+                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Total acres</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{totalAcres>0?totalAcres.toFixed(0)+'ac':'—'}</div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Avg yield</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{avgYield?avgYield+' bu/ac':'—'}</div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Fields</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{hybridFields.length}</div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:11,color:'var(--mu)',marginBottom:2}}>Total bushels est.</div>
+                          <div style={{fontSize:22,fontWeight:700,color:'var(--g)'}}>{avgYield&&totalAcres>0?(parseFloat(avgYield)*totalAcres).toFixed(0):'—'}</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
               </div>
             </div>
           )}
