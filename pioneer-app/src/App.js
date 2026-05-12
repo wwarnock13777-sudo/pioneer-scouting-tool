@@ -735,6 +735,7 @@ function ScoutTab({ fields, showToast }) {
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(mapObj.current)
     }
     startTracking()
+    setTimeout(()=>{ if(mapObj.current) mapObj.current.invalidateSize() }, 200)
     return()=>{if(watchId.current)navigator.geolocation.clearWatch(watchId.current)}
   },[])
 
@@ -829,12 +830,12 @@ function ScoutTab({ fields, showToast }) {
 
 
       <div style={{marginBottom:10}}>
-        <button onClick={()=>setMapOpen(o=>!o)} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+        <button onClick={()=>{ setMapOpen(o=>{ const next=!o; if(next && mapObj.current) setTimeout(()=>mapObj.current.invalidateSize(),50); return next }) }} style={{width:'100%',background:'#fff',border:'1px solid var(--bdr)',borderRadius:mapOpen?'14px 14px 0 0':'14px',padding:'10px 14px',fontSize:13,fontWeight:600,color:'var(--tx)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
           <span style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,background:'#2979ff',borderRadius:'50%',display:'inline-block',boxShadow:'0 0 6px #2979ff'}}></span>Satellite map</span>
           <span style={{fontSize:12,color:'var(--mu)'}}>{mapOpen?'▲ Hide':'▼ Show'}</span>
         </button>
-        <div style={{display:mapOpen?'block':'none',border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden'}}>
-          <div ref={mapRef} style={{width:'100%',height:modal?'25vh':'45vh'}} />
+        <div style={{border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 14px 14px',overflow:'hidden',height:mapOpen?(modal?'25vh':'45vh'):'0px',transition:'height 0.2s'}}>
+          <div ref={mapRef} style={{width:'100%',height:'100%',minHeight:mapOpen?'150px':'0px'}} />
         </div>
       </div>
 
