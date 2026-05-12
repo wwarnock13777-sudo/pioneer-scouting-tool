@@ -1258,9 +1258,9 @@ function LoginScreen({ onLogin }) {
     }
     setChecking(true)
     // Check if this operation exists in DB with a PIN set
-    const { data } = await supabase.from('user_pins').select('pin').eq('op_name', val.toLowerCase()).single()
+    const { data, error: lookupErr } = await supabase.from('user_pins').select('pin').eq('op_name', val.toLowerCase()).maybeSingle()
     setChecking(false)
-    if (data) {
+    if (data && data.pin) {
       setIsNew(false)
     } else {
       setIsNew(true) // new user — will create PIN
@@ -1285,11 +1285,11 @@ function LoginScreen({ onLogin }) {
       if (pin.length !== 4) { setError('PIN must be 4 digits'); return }
       if (pin !== confirmPin) { setError("PINs don't match"); setPin(''); setConfirmPin(''); return }
       const { error: dbErr } = await supabase.from('user_pins').insert([{ op_name: opName.trim().toLowerCase(), pin }])
-      if (dbErr) { setError('Error saving PIN. Try again.'); return }
+      if (dbErr) { setError('Error saving PIN: ' + dbErr.message); return }
       onLogin({ role: 'customer', opName: opName.trim() })
     } else {
       // Existing PIN check
-      const { data } = await supabase.from('user_pins').select('pin').eq('op_name', opName.trim().toLowerCase()).single()
+      const { data } = await supabase.from('user_pins').select('pin').eq('op_name', opName.trim().toLowerCase()).maybeSingle()
       if (data && data.pin === pin) {
         onLogin({ role: 'customer', opName: opName.trim() })
       } else {
