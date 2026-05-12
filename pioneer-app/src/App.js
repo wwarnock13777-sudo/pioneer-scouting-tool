@@ -94,7 +94,7 @@ function RainMiniLog({ fieldId }) {
 }
 
 function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
-  const [stats, setStats] = useState({ gdu:0, rain:0, photos:[], pins:[] })
+  const [stats, setStats] = useState({ rain:0, photos:[], pins:[] })
   const [lightbox, setLightbox] = useState(null)
   const emoji = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
 
@@ -451,87 +451,6 @@ function EntryTab({ onSaved, showToast }) {
         <div style={s.cb}><textarea style={s.ta} rows="3" value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Any additional observations…" /></div>
       </div>
       <button style={s.btn} onClick={handleSave} disabled={saving}><svg viewBox="0 0 24 24" width="17" height="17" stroke="#fff" fill="none" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>{saving?'Saving…':'Save & email to wwarnock13777@gmail.com'}</button>
-    </div>
-  )
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// GDU
-// ══════════════════════════════════════════════════════════════════════════════
-function GduTab({ fields, showToast }) {
-  const [fieldId,setFieldId]=useState('')
-  const [log,setLog]=useState([])
-  const [hi,setHi]=useState('');const [lo,setLo]=useState('');const [date,setDate]=useState(TODAY)
-  const [weather,setWeather]=useState(null)
-  const field=fields.find(f=>f.id===fieldId)
-  useEffect(()=>{if(fieldId)load()},[fieldId])
-  async function load(){const{data}=await supabase.from('gdu_log').select('*').eq('field_id',fieldId).order('log_date',{ascending:false});setLog(data||[])}
-  const total=log.reduce((s,e)=>s+Number(e.gdu),0)
-  async function addManual(){
-    if(!hi||!lo||!date){showToast('Enter high, low, and date');return}
-    const gdu=calcGdu(hi,lo)
-    await supabase.from('gdu_log').insert([{field_id:fieldId,log_date:date,high_temp:Number(hi),low_temp:Number(lo),gdu}])
-    setHi('');setLo('');setDate(TODAY);load();showToast(`Added ${gdu} GDUs`)
-  }
-  async function addWeather(){
-    if(!weather)return
-    await supabase.from('gdu_log').insert([{field_id:fieldId,log_date:weather.date,high_temp:weather.hi,low_temp:weather.lo,gdu:weather.gdu}])
-    const g=weather.gdu;setWeather(null);load();showToast(`Added ${g} GDUs`)
-  }
-  async function fetchWeather(){
-    if(!field?.zip){showToast('No zip on this field');return}
-    try{
-      const r=await fetch(`https://api.openweathermap.org/data/2.5/weather?zip=${field.zip},us&units=imperial&appid=bd5e378503939ddaee76f12ad7a97608`)
-      const d=await r.json()
-      if(!d.main){showToast('Weather not found');return}
-      const hi=Math.round(d.main.temp_max),lo=Math.round(d.main.temp_min)
-      setWeather({date:TODAY,hi,lo,gdu:calcGdu(hi,lo)})
-    }catch{showToast('Could not fetch weather')}
-  }
-  return (
-    <div style={s.view}>
-      <div style={s.info}>GDUs = ((High + Low) ÷ 2) – 50. High capped 86°F, low floored 50°F.</div>
-      <FieldSelect fields={fields} value={fieldId} onChange={setFieldId} />
-      {!fieldId?<div style={s.empty}>Select a field to track GDUs</div>:<>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9,marginBottom:11}}>
-          <div style={s.stat}><div style={{fontSize:11,color:'var(--mu)',marginBottom:3}}>Total GDUs</div><div style={{fontSize:24,fontWeight:700}}>{total.toFixed(1)}<span style={{fontSize:13,color:'var(--mu)'}}> GDU</span></div></div>
-          <div style={s.stat}><div style={{fontSize:11,color:'var(--mu)',marginBottom:3}}>Days logged</div><div style={{fontSize:24,fontWeight:700}}>{log.length}<span style={{fontSize:13,color:'var(--mu)'}}> days</span></div></div>
-        </div>
-        <div style={s.card}>
-          <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Fetch today's weather</span></div>
-          <div style={s.cb}>
-            {field?.zip&&<div style={s.info}>Zip: {field.zip}</div>}
-            <button style={s.btn} onClick={fetchWeather}>Pull weather for field zip</button>
-            {weather&&<>
-              <div style={{background:'#f8f8f5',border:'1px solid var(--bdr)',borderRadius:10,padding:'12px 13px'}}>
-                {[['Date',weather.date],['High',weather.hi+'°F'],['Low',weather.lo+'°F'],['GDUs today',weather.gdu+' GDU']].map(([k,v])=>(
-                  <div key={k} style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:'var(--mu)'}}>{k}</span><span style={{fontSize:14,fontWeight:600,color:k==='GDUs today'?'var(--g)':undefined}}>{v}</span></div>
-                ))}
-              </div>
-              <button style={s.btn} onClick={addWeather}>Add to GDU log</button>
-            </>}
-            <div style={{height:1,background:'var(--bdr)',margin:'4px 0'}} />
-            <label style={s.lbl}>Or enter manually</label>
-            <div style={s.two}>
-              <div style={s.fg}><label style={s.lbl}>High (°F)</label><input style={s.inp} type="number" value={hi} onChange={e=>setHi(e.target.value)} placeholder="86" inputMode="numeric" /></div>
-              <div style={s.fg}><label style={s.lbl}>Low (°F)</label><input style={s.inp} type="number" value={lo} onChange={e=>setLo(e.target.value)} placeholder="50" inputMode="numeric" /></div>
-            </div>
-            <div style={s.fg}><label style={s.lbl}>Date</label><input style={s.inp} type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
-            <button style={s.btn} onClick={addManual}>Add GDU entry</button>
-          </div>
-        </div>
-        <div style={s.card}>
-          <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/></svg></div><span style={{fontSize:13,fontWeight:600}}>GDU log</span></div>
-          <div style={{padding:'4px 14px'}}>
-            {!log.length?<div style={{...s.empty,padding:20}}>No entries yet</div>:log.map(e=>(
-              <div key={e.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 0',borderBottom:'1px solid var(--bdr)'}}>
-                <div><div style={{fontSize:15,fontWeight:600}}>{e.gdu} GDU</div><div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{e.log_date} · {e.high_temp}°/{e.low_temp}°F</div></div>
-                <DelBtn onClick={async()=>{await supabase.from('gdu_log').delete().eq('id',e.id);load()}} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </>}
     </div>
   )
 }
@@ -1445,7 +1364,7 @@ export default function App() {
 
   const tabs=[
     {id:'dashboard',label:'Fields',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>},
-    ...(isAdmin ? [{id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>}] : [])
+    ...(isAdmin ? [{id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>}] : []),
     {id:'rain',label:'Rain',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg>},
     {id:'photos',label:'Photos',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>},
     {id:'scout',label:'Scout',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>},
