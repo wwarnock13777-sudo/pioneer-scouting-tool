@@ -100,14 +100,12 @@ function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
 
   useEffect(() => {
     async function load() {
-      const [{ data:gdu },{ data:rain },{ data:photos },{ data:pins }] = await Promise.all([
-        supabase.from('gdu_log').select('gdu').eq('field_id', field.id),
+      const [{ data:rain },{ data:photos },{ data:pins }] = await Promise.all([
         supabase.from('rain_log').select('amount').eq('field_id', field.id),
         supabase.from('photos').select('*').eq('field_id', field.id).order('log_date', { ascending:false }),
         supabase.from('scout_pins').select('*').eq('field_id', field.id).order('log_date', { ascending:false }),
       ])
       setStats({
-        gdu: (gdu||[]).reduce((a,r)=>a+Number(r.gdu),0),
         rain: (rain||[]).reduce((a,r)=>a+Number(r.amount),0),
         photos: photos||[],
         pins: pins||[],
@@ -149,7 +147,7 @@ function FieldDetail({ field, onBack, onDeleted, isAdmin, userOpName }) {
           Call {field.phone}
         </a>}
         <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
-          {[`${stats.gdu.toFixed(1)} GDU`,`${stats.rain.toFixed(2)}" rain`,`${stats.photos.length} photos`,`${stats.pins.length} pins`].map(t=>(
+          {[`${stats.rain.toFixed(2)}" rain`,`${stats.photos.length} photos`,`${stats.pins.length} pins`].map(t=>(
             <span key={t} style={{background:'rgba(255,255,255,0.2)',borderRadius:20,padding:'4px 10px',fontSize:12,fontWeight:600}}>{t}</span>
           ))}
         </div>
@@ -1447,8 +1445,7 @@ export default function App() {
 
   const tabs=[
     {id:'dashboard',label:'Fields',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>},
-    ...(isAdmin ? [{id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>}] : []),
-    {id:'gdu',label:'GDU',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>},
+    ...(isAdmin ? [{id:'entry',label:'Entry',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>}] : [])
     {id:'rain',label:'Rain',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg>},
     {id:'photos',label:'Photos',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>},
     {id:'scout',label:'Scout',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>},
@@ -1469,7 +1466,6 @@ export default function App() {
       </nav>
       {tab==='dashboard'&&<DashboardTab fields={fields} showToast={showToast} onRefresh={()=>loadFields()} isAdmin={isAdmin} userOpName={user?.opName} />}
       {tab==='entry'    &&isAdmin&&<EntryTab onSaved={()=>loadFields()} showToast={showToast} />}
-      {tab==='gdu'      &&<GduTab fields={fields} showToast={showToast} />}
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
       {tab==='scout'    &&<ScoutTab fields={fields} showToast={showToast} />}
