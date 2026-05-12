@@ -743,9 +743,12 @@ function ScoutTab({ fields, showToast }) {
   useEffect(()=>{renderMarkers()},[pins])
 
   function startTracking(){
+    try {
     const L=window.L
+    if(!L){console.warn('Leaflet not loaded');return}
     if(watchId.current)navigator.geolocation.clearWatch(watchId.current)
     watchId.current=navigator.geolocation.watchPosition(pos=>{
+      try {
       const{latitude:lat,longitude:lng}=pos.coords
       if(!locMarker.current){
         const dotIcon=L.divIcon({html:`<div style="width:18px;height:18px;background:#2979ff;border:3px solid #fff;border-radius:50%;box-shadow:0 0 10px rgba(41,121,255,0.8)"></div>`,className:'',iconSize:[18,18],iconAnchor:[9,9]})
@@ -760,7 +763,9 @@ function ScoutTab({ fields, showToast }) {
         pathLine.current=L.polyline(pathPts.current,{color:'#2979ff',weight:3,opacity:0.7}).addTo(mapObj.current)
       }
       checkZone(lat,lng)
+      } catch(e){ console.error('tracking error:',e) }
     },()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:15000})
+    } catch(e){ console.error('startTracking error:',e) }
   }
 
   function checkZone(lat,lng){
@@ -797,9 +802,14 @@ function ScoutTab({ fields, showToast }) {
   function dropPin(){
     if(!fieldId){showToast('Select a field first');return}
     navigator.geolocation.getCurrentPosition(pos=>{
-      setPending({lat:pos.coords.latitude,lng:pos.coords.longitude})
-      mapObj.current.setView([pos.coords.latitude,pos.coords.longitude],16)
-      setModal(true);setCat('');setNotes('');setPinPhoto(null)
+      try {
+        setPending({lat:pos.coords.latitude,lng:pos.coords.longitude})
+        if(mapObj.current) mapObj.current.setView([pos.coords.latitude,pos.coords.longitude],16)
+        setModal(true);setCat('');setNotes('');setPinPhoto(null)
+      } catch(e) {
+        console.error('dropPin error:',e)
+        showToast('Error dropping pin: '+e.message)
+      }
     },()=>showToast('Enable location access first'),{enableHighAccuracy:true,timeout:10000})
   }
 
@@ -1728,7 +1738,7 @@ export default function App() {
 
   useEffect(()=>{
     // Restore session from sessionStorage
-    const saved = sessionStorage.getItem('pioneer_user')
+    const saved = localStorage.getItem('pioneer_user')
     if (saved) {
       const u = JSON.parse(saved)
       setUser(u)
@@ -1749,13 +1759,13 @@ export default function App() {
 
   function handleLogin(u) {
     setUser(u)
-    sessionStorage.setItem('pioneer_user', JSON.stringify(u))
+    localStorage.setItem('pioneer_user', JSON.stringify(u))
     loadFields(u)
   }
 
   function handleLogout() {
     setUser(null)
-    sessionStorage.removeItem('pioneer_user')
+    localStorage.removeItem('pioneer_user')
     setFields([])
     setTab('dashboard')
   }
