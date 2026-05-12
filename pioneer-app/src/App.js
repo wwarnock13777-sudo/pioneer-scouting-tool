@@ -426,6 +426,7 @@ function LocMapPicker({ onPick, initLat, initLng }) {
 function EntryTab({ onSaved, showToast }) {
   const [form, setForm] = useState({ op:'', field_name:'', hybrid:'', zip:'', loc:'', loc_lat:null, loc_lng:null, plant_date:TODAY, pop:'', stand_e:'', pcond_notes:'', weed_pre:'', weed_post:'', stand_count:'', early_obs:'', fproduct:'', notes:'', tillage_other:'', ftiming_other:'', contacts:[{name:'',phone:''}] })
   const [showLocMap, setShowLocMap] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
   const [sel, setSel] = useState({ tillage:'', pcond:'', emerge:'', fplanned:'', ftiming:'' })
   const [saving, setSaving] = useState(false)
   const [smsData, setSmsData] = useState(null) // {nums, msg} ready to send
@@ -481,7 +482,7 @@ function EntryTab({ onSaved, showToast }) {
           {/* Field location — drop pin on map */}
           <div style={s.fg}>
             <label style={s.lbl}>Field location</label>
-            <button type="button" onClick={()=>setShowLocMap(true)} style={{...s.inp, textAlign:'left', cursor:'pointer', color: form.loc_lat ? 'var(--tx)' : 'var(--hi)', display:'flex', alignItems:'center', gap:8, background: form.loc_lat ? 'var(--gl)' : '#f8f8f5', border: form.loc_lat ? '1px solid var(--g)' : '1px solid var(--bdr)'}}>
+            <button type="button" onClick={()=>setShowLocMap(true); setMapReady(false); setTimeout(()=>setMapReady(true), 150)} style={{...s.inp, textAlign:'left', cursor:'pointer', color: form.loc_lat ? 'var(--tx)' : 'var(--hi)', display:'flex', alignItems:'center', gap:8, background: form.loc_lat ? 'var(--gl)' : '#f8f8f5', border: form.loc_lat ? '1px solid var(--g)' : '1px solid var(--bdr)'}}>
               <svg viewBox="0 0 24 24" width="16" height="16" stroke={form.loc_lat?'var(--g)':'var(--hi)'} fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               {form.loc_lat ? `📍 ${Number(form.loc_lat).toFixed(5)}, ${Number(form.loc_lng).toFixed(5)}` : 'Tap to drop pin on map'}
             </button>
@@ -496,12 +497,12 @@ function EntryTab({ onSaved, showToast }) {
                   <div style={{fontSize:15,fontWeight:600}}>Drop pin on field</div>
                   <div style={{fontSize:12,color:'var(--mu)'}}>Tap the map to place your pin</div>
                 </div>
-                <button onClick={()=>setShowLocMap(false)} style={{background:'var(--g)',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontWeight:600,cursor:'pointer',fontSize:14}}>Done</button>
+                <button onClick={()=>{ setShowLocMap(false); setMapReady(false) }} style={{background:'var(--g)',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',fontWeight:600,cursor:'pointer',fontSize:14}}>Done</button>
               </div>
-              <LocMapPicker
+              {mapReady && <LocMapPicker
                 onPick={(lat,lng)=>{ set('loc_lat',lat); set('loc_lng',lng) }}
                 initLat={form.loc_lat} initLng={form.loc_lng}
-              />
+              />}
             </div>
           )}
 
