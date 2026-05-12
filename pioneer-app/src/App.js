@@ -183,6 +183,7 @@ function FieldDetail({ field, onBack, onDeleted }) {
       </div>
       <div style={s.card}>
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><span style={{fontSize:13,fontWeight:600}}>Scout pins — {stats.pins.length}</span></div>
+        {stats.pins.length > 0 && <MiniScoutMap pins={stats.pins} />}
         <div style={{padding:'4px 14px 8px'}}>
           {!stats.pins.length ? <div style={{...s.empty,padding:12}}>No pins dropped yet</div> : stats.pins.map(p=>(
             <div key={p.id} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 0',borderBottom:'1px solid #f5f5f0'}}>
@@ -211,9 +212,12 @@ function FieldDetail({ field, onBack, onDeleted }) {
   )
 }
 
-function DashboardTab({ fields, onRefresh }) {
+function DashboardTab({ fields, onRefresh, isAdmin }) {
   const [detail, setDetail] = useState(null)
+  const [expandedFarms, setExpandedFarms] = useState({})
+
   if (detail) return <FieldDetail field={detail} onBack={()=>setDetail(null)} onDeleted={onRefresh} />
+
   if (!fields.length) return (
     <div style={s.view}>
       <div style={{...s.empty,paddingTop:60}}>
@@ -223,17 +227,55 @@ function DashboardTab({ fields, onRefresh }) {
       </div>
     </div>
   )
+
+  // Group by farm name
+  const farms = {}
+  fields.forEach(f => {
+    const farm = f.op || 'Unknown'
+    if (!farms[farm]) farms[farm] = []
+    farms[farm].push(f)
+  })
+  const sortedFarms = Object.keys(farms).sort()
+
+  const toggleFarm = (farm) => setExpandedFarms(e => ({...e, [farm]: !e[farm]}))
+
+  // If only one farm (customer view) expand it by default
+  if (sortedFarms.length === 1 && expandedFarms[sortedFarms[0]] === undefined) {
+    setTimeout(() => setExpandedFarms({[sortedFarms[0]]: true}), 0)
+  }
+
   return (
     <div style={s.view}>
-      <div style={{fontSize:11,fontWeight:600,color:'var(--mu)',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:10}}>Tap a field to view details</div>
-      {fields.map(f => (
-        <div key={f.id} onClick={()=>setDetail(f)} style={{background:'var(--card)',border:'1px solid var(--bdr)',borderRadius:16,padding:14,marginBottom:10,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:16,fontWeight:700}}>{f.op}</div>
-            <div style={{fontSize:12,color:'var(--mu)',marginTop:3}}>{f.hybrid||'—'} · {f.plant_date||'no date'}</div>
-            {f.loc && <div style={{fontSize:12,color:'var(--hi)',marginTop:2}}>{f.loc}</div>}
-          </div>
-          <svg viewBox="0 0 24 24" width="18" height="18" stroke="var(--hi)" fill="none" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+      <div style={{fontSize:11,fontWeight:600,color:'var(--mu)',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:10}}>
+        {isAdmin ? `${sortedFarms.length} farm${sortedFarms.length!==1?'s':''} · ${fields.length} fields` : 'Your fields'}
+      </div>
+      {sortedFarms.map(farm => (
+        <div key={farm} style={{marginBottom:10}}>
+          {/* Farm header */}
+          <button onClick={()=>toggleFarm(farm)} style={{width:'100%',background:expandedFarms[farm]?'var(--g)':'var(--card)',border:'1px solid '+(expandedFarms[farm]?'var(--g)':'var(--bdr)'),borderRadius:expandedFarms[farm]?'12px 12px 0 0':'12px',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <svg viewBox="0 0 24 24" width="16" height="16" stroke={expandedFarms[farm]?'#fff':'var(--g)'} fill="none" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span style={{fontSize:14,fontWeight:700,color:expandedFarms[farm]?'#fff':'var(--tx)'}}>{farm}</span>
+              <span style={{fontSize:12,color:expandedFarms[farm]?'rgba(255,255,255,0.75)':'var(--mu)'}}>{farms[farm].length} field{farms[farm].length!==1?'s':''}</span>
+            </div>
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke={expandedFarms[farm]?'#fff':'var(--hi)'} fill="none" strokeWidth="2">
+              {expandedFarms[farm] ? <polyline points="18 15 12 9 6 15"/> : <polyline points="6 9 12 15 18 9"/>}
+            </svg>
+          </button>
+          {/* Fields under farm */}
+          {expandedFarms[farm] && (
+            <div style={{border:'1px solid var(--bdr)',borderTop:'none',borderRadius:'0 0 12px 12px',overflow:'hidden'}}>
+              {farms[farm].map((f, i) => (
+                <div key={f.id} onClick={()=>setDetail(f)} style={{background:'var(--card)',padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,cursor:'pointer',borderTop: i>0 ? '1px solid var(--bdr)' : 'none'}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:600,color:'var(--tx)'}}>{f.hybrid||'—'}</div>
+                    <div style={{fontSize:12,color:'var(--mu)',marginTop:2}}>{f.plant_date||'no date'}{f.loc?' · '+f.loc:''}</div>
+                  </div>
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--hi)" fill="none" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -723,28 +765,79 @@ function ScoutTab({ fields, showToast }) {
       showToast('Loading shapefile…')
       const buf=await file.arrayBuffer()
       const geojson=await window.shp(buf)
-      const colors=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22']
-      const hybridKeys=['hybrid','Hybrid','HYBRID','variety','Variety','VARIETY','product','Product','PRODUCT','seed','Seed']
+      const features=Array.isArray(geojson)?geojson.reduce((a,g)=>a.concat(g.features||[]),[]):(geojson.features||[geojson])
+
+      // All known hybrid/variety attribute names from JD Ops Center, FieldView, Granular, AgLeader
+      const hybridKeys=[
+        'Variety','variety','VARIETY',
+        'Hybrid','hybrid','HYBRID',
+        'Product','product','PRODUCT',
+        'SeedVariety','seedvariety','SEEDVARIETY',
+        'Seed_Var','seed_var','SEED_VAR',
+        'CropVariety','cropvariety',
+        'VarietyName','varietyname',
+        'HybridName','hybridname',
+        'ProductName','productname',
+        'Variety_Na','variety_na',
+        'VARIETY_NA','var_name','VAR_NAME',
+        'brand_name','BRAND_NAME',
+        'seed','Seed','SEED',
+      ]
+
+      // Detect which key is present in this file
+      const sampleProps = features[0]?.properties || {}
+      const detectedKey = hybridKeys.find(k => sampleProps[k] !== undefined && sampleProps[k] !== null && sampleProps[k] !== '')
+      console.log('Shapefile props:', Object.keys(sampleProps))
+      console.log('Detected hybrid key:', detectedKey)
+
+      // Group features by hybrid value so same hybrid = same color
+      const hybridColorMap = {}
+      const palette = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a']
+      let colorIdx = 0
+
+      const getHybridVal = (props) => {
+        if (detectedKey) return String(props[detectedKey]||'').trim() || 'Unknown'
+        // fallback: try all keys
+        return hybridKeys.reduce((found,k)=>found||(props[k]?String(props[k]).trim():''),'') || 'Unknown'
+      }
+
       zoneLayers.current.forEach(l=>mapObj.current.removeLayer(l));zoneLayers.current=[]
       const newZones=[]
-      const features=(geojson.features||[geojson])
-      features.forEach((feat,i)=>{
+
+      features.forEach((feat)=>{
         const props=feat.properties||{}
-        const hybridVal=hybridKeys.reduce((f,k)=>f||(props[k]||''),'') || `Zone ${i+1}`
-        const color=colors[i%colors.length]
-        const layer=L.geoJSON(feat,{style:{color,weight:2,fillColor:color,fillOpacity:0.2},
-          onEachFeature:(f,l)=>l.bindPopup(`<strong>${hybridVal}</strong>`)
+        const hybridVal=getHybridVal(props)
+        if(!hybridColorMap[hybridVal]){
+          hybridColorMap[hybridVal]=palette[colorIdx%palette.length]
+          colorIdx++
+        }
+        const color=hybridColorMap[hybridVal]
+        const layer=L.geoJSON(feat,{
+          style:{color,weight:1.5,fillColor:color,fillOpacity:0.35,opacity:0.8},
+          onEachFeature:(f,l)=>{
+            const p=f.properties||{}
+            const rate=p.Rt_Apd||p.SeedRate||p.rate||p.Rate||p.RATE||p.seeding_rate||''
+            l.bindPopup(`<div style="font-size:14px;padding:6px"><strong style="color:${color}">⬛ ${hybridVal}</strong>${rate?`<br/><span style="font-size:12px;color:#666">Rate: ${rate}</span>`:''}</div>`,{maxWidth:200})
+          }
         }).addTo(mapObj.current)
         zoneLayers.current.push(layer)
-        newZones.push({hybrid:hybridVal,color,layer})
       })
+
+      // Build unique zone list for legend
+      Object.entries(hybridColorMap).forEach(([hybrid,color])=>{
+        newZones.push({hybrid,color,layer:null})
+      })
+
       setZones(newZones)
       if(zoneLayers.current.length){
         const group=L.featureGroup(zoneLayers.current)
         mapObj.current.fitBounds(group.getBounds(),{padding:[20,20]})
       }
-      showToast(`Loaded ${features.length} zone${features.length!==1?'s':''}!`)
+      const zoneCount=Object.keys(hybridColorMap).length
+      showToast(`✓ Loaded ${zoneCount} hybrid zone${zoneCount!==1?'s':''} from ${features.length} features`)
+      if(!detectedKey) showToast('Tip: hybrid name not auto-detected — tap a zone to see attributes')
     }catch(err){
+      console.error('Shapefile error:',err)
       showToast('Could not read shapefile. Try a .zip with .shp/.dbf/.prj inside.')
     }
     e.target.value=''
@@ -800,11 +893,12 @@ function ScoutTab({ fields, showToast }) {
         <div style={s.ch}><div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></div><span style={{fontSize:13,fontWeight:600}}>As-planted field map</span></div>
         <div style={s.cb}>
           {zones.length>0&&(
-            <div>
+            <div style={{marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--mu)',letterSpacing:'0.04em',textTransform:'uppercase',marginBottom:6}}>Hybrid legend</div>
               {zones.map((z,i)=>(
-                <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:'1px solid #f5f5f0',fontSize:13}}>
-                  <div style={{width:14,height:14,borderRadius:3,background:z.color,flexShrink:0}} />
-                  <span style={{fontWeight:500}}>{z.hybrid}</span>
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:'1px solid #f5f5f0'}}>
+                  <div style={{width:24,height:16,borderRadius:4,background:z.color,flexShrink:0,border:'1px solid rgba(0,0,0,0.1)'}} />
+                  <span style={{fontSize:13,fontWeight:600,color:'var(--tx)'}}>{z.hybrid}</span>
                 </div>
               ))}
             </div>
@@ -886,6 +980,184 @@ function ScoutTab({ fields, showToast }) {
       )}
     </div>
   )
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VISIT NOTES TAB
+// ══════════════════════════════════════════════════════════════════════════════
+function VisitNotesTab({ fields, showToast }) {
+  const [selectedFarm, setSelectedFarm] = useState('')
+  const [selectedFieldId, setSelectedFieldId] = useState('')
+  const [note, setNote] = useState('')
+  const [date, setDate] = useState(TODAY)
+  const [notes, setNotes] = useState([])
+  const [saving, setSaving] = useState(false)
+
+  // Group fields by operation name
+  const farms = [...new Set(fields.map(f => f.op))].sort()
+  const farmFields = fields.filter(f => f.op === selectedFarm)
+  const selectedField = fields.find(f => f.id === selectedFieldId)
+
+  useEffect(() => { if (selectedFieldId) loadNotes() }, [selectedFieldId])
+  useEffect(() => { setSelectedFieldId('') }, [selectedFarm])
+
+  async function loadNotes() {
+    const { data } = await supabase.from('visit_notes')
+      .select('*').eq('field_id', selectedFieldId)
+      .order('visit_date', { ascending: false })
+    setNotes(data || [])
+  }
+
+  async function saveNote() {
+    if (!note.trim()) { showToast('Enter some notes first'); return }
+    if (!selectedFieldId) { showToast('Select a field first'); return }
+    setSaving(true)
+    const { error } = await supabase.from('visit_notes').insert([{
+      field_id: selectedFieldId,
+      visit_date: date,
+      note: note.trim(),
+      op: selectedField?.op || '',
+    }])
+    setSaving(false)
+    if (error) { showToast('Save failed: ' + error.message); return }
+
+    // Email
+    const sub = encodeURIComponent(`Field Visit Note — ${selectedField?.op} — ${date}`)
+    const body = encodeURIComponent(
+      `Field Visit Report\n` +
+      `==============================\n` +
+      `Farm: ${selectedField?.op || '—'}\n` +
+      `Field: ${selectedField?.loc || selectedField?.hybrid || '—'}\n` +
+      `Hybrid: ${selectedField?.hybrid || '—'}\n` +
+      `Date: ${date}\n\n` +
+      `Notes:\n${note.trim()}`
+    )
+    window.location.href = `mailto:wwarnock13777@gmail.com?subject=${sub}&body=${body}`
+
+    // Text to field contact
+    if (selectedField?.phone) {
+      setTimeout(() => {
+        const msg = encodeURIComponent(`Field visit note for ${selectedField.op} on ${date}: ${note.trim()}`)
+        window.open(`sms:${selectedField.phone}?body=${msg}`)
+      }, 1500)
+    }
+
+    loadNotes()
+    setNote('')
+    showToast('Visit note saved & sent!')
+  }
+
+  return (
+    <div style={s.view}>
+      {/* Farm selector */}
+      <div style={s.fg}>
+        <label style={s.lbl}>Farm / Operation</label>
+        <select style={s.fsel} value={selectedFarm} onChange={e => setSelectedFarm(e.target.value)}>
+          <option value="">— Select a farm —</option>
+          {farms.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
+
+      {/* Field dropdown */}
+      {selectedFarm && (
+        <div style={{...s.fg, marginBottom:12}}>
+          <label style={s.lbl}>Field</label>
+          <select style={s.fsel} value={selectedFieldId} onChange={e => setSelectedFieldId(e.target.value)}>
+            <option value="">— Select a field —</option>
+            {farmFields.map(f => (
+              <option key={f.id} value={f.id}>
+                {f.hybrid || f.loc || f.plant_date || f.id}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {selectedFieldId && (
+        <>
+          {/* Field info pill */}
+          <div style={{ background:'var(--g)', borderRadius:10, padding:'10px 14px', marginBottom:12, color:'#fff', fontSize:13 }}>
+            <span style={{fontWeight:600}}>{selectedField?.op}</span>
+            {selectedField?.hybrid && <span style={{opacity:0.85}}> · {selectedField.hybrid}</span>}
+            {selectedField?.loc && <span style={{opacity:0.7}}> · {selectedField.loc}</span>}
+          </div>
+
+          {/* Note entry */}
+          <div style={s.card}>
+            <div style={s.ch}>
+              <div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+              <span style={{fontSize:13,fontWeight:600}}>New field visit note</span>
+            </div>
+            <div style={s.cb}>
+              <div style={s.fg}><label style={s.lbl}>Visit date</label><input style={s.inp} type="date" value={date} onChange={e => setDate(e.target.value)} /></div>
+              <div style={s.fg}>
+                <label style={s.lbl}>Notes</label>
+                <textarea style={{...s.ta, minHeight:140}} rows="6" value={note} onChange={e => setNote(e.target.value)} placeholder="What did you see? Crop stage, issues, recommendations, next steps…" />
+              </div>
+              <button style={s.btn} onClick={saveNote} disabled={saving}>
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="#fff" fill="none" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                {saving ? 'Saving…' : 'Save & send note'}
+              </button>
+              {selectedField?.phone && <div style={{fontSize:12,color:'var(--mu)',textAlign:'center',marginTop:-4}}>Will email + text {selectedField.phone}</div>}
+            </div>
+          </div>
+
+          {/* Past notes */}
+          <div style={s.card}>
+            <div style={s.ch}>
+              <div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+              <span style={{fontSize:13,fontWeight:600}}>Past visit notes ({notes.length})</span>
+            </div>
+            <div style={{padding:'4px 14px 8px'}}>
+              {!notes.length ? <div style={{...s.empty,padding:16}}>No visit notes yet</div> : notes.map(n => (
+                <div key={n.id} style={{padding:'12px 0', borderBottom:'1px solid var(--bdr)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                    <span style={{fontSize:12,fontWeight:600,color:'var(--g)'}}>{n.visit_date}</span>
+                    <button onClick={async()=>{ if(!window.confirm('Delete note?'))return; await supabase.from('visit_notes').delete().eq('id',n.id); loadNotes() }} style={{background:'none',border:'none',color:'var(--hi)',cursor:'pointer',padding:4}}>
+                      <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                    </button>
+                  </div>
+                  <div style={{fontSize:14,color:'var(--tx)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{n.note}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MINI SCOUT MAP — shown inside field detail on dashboard
+// ══════════════════════════════════════════════════════════════════════════════
+function MiniScoutMap({ pins }) {
+  const mapRef = useRef(null)
+  const mapObj = useRef(null)
+
+  useEffect(() => {
+    if (!pins.length) return
+    const L = window.L
+    if (!mapObj.current) {
+      mapObj.current = L.map(mapRef.current, { zoomControl:false, dragging:true, scrollWheelZoom:false })
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 }).addTo(mapObj.current)
+    }
+    const em = { Disease:'🌿', Weed:'🌱', Pest:'🐛', Nutrient:'🌾', Water:'💧', Other:'📍' }
+    const markerList = []
+    pins.forEach(p => {
+      const icon = L.divIcon({ html:`<div style="font-size:22px;line-height:1">${em[p.cat]||'📍'}</div>`, className:'', iconSize:[26,26], iconAnchor:[13,26] })
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(mapObj.current)
+      m.bindPopup(`<div style="padding:6px;font-size:13px"><strong>${p.cat||'Pin'}</strong><br/>${p.log_date}<br/>${p.notes||''}</div>`)
+      markerList.push(m)
+    })
+    const group = L.featureGroup(markerList)
+    mapObj.current.fitBounds(group.getBounds(), { padding:[30,30] })
+  }, [pins])
+
+  if (!pins.length) return <div style={{...s.empty,padding:12}}>No pins dropped yet</div>
+
+  return <div ref={mapRef} style={{width:'100%',height:220,borderRadius:'0 0 10px 10px'}} />
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1137,6 +1409,7 @@ export default function App() {
     {id:'rain',label:'Rain',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg>},
     {id:'photos',label:'Photos',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>},
     {id:'scout',label:'Scout',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>},
+    {id:'notes',label:'Notes',icon:<svg viewBox="0 0 24 24" width="19" height="19" stroke="currentColor" fill="none" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>},
   ]
 
   return (
@@ -1157,6 +1430,7 @@ export default function App() {
       {tab==='rain'     &&<RainTab fields={fields} showToast={showToast} />}
       {tab==='photos'   &&<PhotosTab fields={fields} showToast={showToast} />}
       {tab==='scout'    &&<ScoutTab fields={fields} showToast={showToast} />}
+      {tab==='notes'    &&<VisitNotesTab fields={fields} showToast={showToast} />}
       <Toast msg={toast} />
     </>
   )
