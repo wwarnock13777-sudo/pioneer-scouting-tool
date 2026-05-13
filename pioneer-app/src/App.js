@@ -1335,8 +1335,8 @@ function YieldTab({ fields, showToast }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // REPORTS TAB
 // ══════════════════════════════════════════════════════════════════════════════
-function ReportsTab({ fields, showToast, isAdmin, userOpName }) {
-  const [view, setView] = useState('overview') // overview | compare | hybrid
+function ReportsTab({ fields, showToast, isAdmin, userOpName, startView }) {
+  const [view, setView] = useState(startView || 'overview') // overview | compare | hybrid
   const [allYields, setAllYields] = useState([])
   const [allRain, setAllRain] = useState([])
   const [compareFields, setCompareFields] = useState(['', ''])
@@ -1428,6 +1428,7 @@ function ReportsTab({ fields, showToast, isAdmin, userOpName }) {
     { id:'overview', label:'Overview' },
     { id:'compare', label:'Compare' },
     { id:'hybrid', label:'By Hybrid' },
+    { id:'leaderboard', label:'🏆 Leaderboard' },
   ]
 
   const compareLabels = ['A','B','C','D','E']
@@ -1678,6 +1679,81 @@ function ReportsTab({ fields, showToast, isAdmin, userOpName }) {
           {!selectedHybrid && <div style={s.empty}>Select a hybrid to see all fields and rankings</div>}
         </>
       )}
+
+      {/* ── LEADERBOARD ── */}
+      {view==='leaderboard' && !loading && (() => {
+        // Group all fields by hybrid, calc avg yield and total acres
+        const hybridMap = {}
+        fields.forEach(f => {
+          const h = f.hybrid
+          if (!h) return
+          if (!hybridMap[h]) hybridMap[h] = { hybrid:h, fields:[], totalAcres:0, yields:[] }
+          hybridMap[h].fields.push(f)
+          hybridMap[h].totalAcres += Number(f.acres || 0)
+          const fy = allYields.filter(y => y.field_id === f.id)
+          fy.forEach(y => hybridMap[h].yields.push(Number(y.yield_buac)))
+        })
+
+        const ranked = Object.values(hybridMap)
+          .filter(h => h.yields.length > 0)
+          .map(h => ({
+            ...h,
+            avgYield: h.yields.reduce((a,b)=>a+b,0) / h.yields.length,
+            fieldCount: h.fields.length,
+          }))
+          .sort((a,b) => b.avgYield - a.avgYield)
+
+        const maxY = ranked.length ? ranked[0].avgYield : 1
+        const medals = ['🥇','🥈','🥉']
+
+        return (
+          <div style={s.card}>
+            <div style={s.ch}>
+              <div style={s.ci}><svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--g)" fill="none" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+              <span style={{fontSize:13,fontWeight:600}}>Hybrid yield leaderboard</span>
+            </div>
+            <div style={{padding:'13px 14px'}}>
+              {ranked.length === 0 ? (
+                <div style={{...s.empty,padding:12}}>No yield data yet — add yields in the Yield tab</div>
+              ) : ranked.map((h, i) => {
+                const isMyHybrid = !isAdmin && fields.some(f => f.hybrid === h.hybrid)
+                return (
+                  <div key={h.hybrid} style={{marginBottom:16,padding:isMyHybrid?'12px':0,background:isMyHybrid?'var(--gl)':'transparent',borderRadius:isMyHybrid?10:0,border:isMyHybrid?'1px solid var(--g)':'none'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          <span style={{fontSize:20}}>{medals[i] || `#${i+1}`}</span>
+                          <div>
+                            <div style={{fontSize:15,fontWeight:700,color:isMyHybrid?'var(--gd)':'var(--tx)'}}>{h.hybrid}</div>
+                            <div style={{fontSize:12,color:'var(--mu)',marginTop:1}}>
+                              {h.fieldCount} field{h.fieldCount!==1?'s':''}
+                              {h.totalAcres>0 ? ` · ${h.totalAcres.toFixed(0)} acres` : ''}
+                              {isMyHybrid && <span style={{marginLeft:6,background:'var(--g)',color:'#fff',padding:'1px 7px',borderRadius:10,fontSize:11,fontWeight:600}}>Your hybrid</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:'right',flexShrink:0}}>
+                        <div style={{fontSize:20,fontWeight:700,color:i===0?'#b8860b':i===1?'#888':i===2?'#8b4513':'var(--g)'}}>{h.avgYield.toFixed(1)}</div>
+                        <div style={{fontSize:11,color:'var(--mu)'}}>bu/ac avg</div>
+                        {h.totalAcres>0 && <div style={{fontSize:11,color:'var(--mu)'}}>{(h.avgYield*h.totalAcres).toFixed(0)} bu est.</div>}
+                      </div>
+                    </div>
+                    <div style={{background:'rgba(0,0,0,0.08)',borderRadius:6,height:10,overflow:'hidden'}}>
+                      <div style={{height:'100%',borderRadius:6,background:i===0?'#b8860b':i===1?'#aaa':i===2?'#cd7f32':'var(--g)',width:`${(h.avgYield/maxY)*100}%`,transition:'width 0.5s'}} />
+                    </div>
+                  </div>
+                )
+              })}
+              {ranked.length > 0 && (
+                <div style={{marginTop:8,padding:'10px 12px',background:'#f8f8f5',borderRadius:10,fontSize:12,color:'var(--mu)'}}>
+                  {ranked.length} hybrid{ranked.length!==1?'s':''} ranked · {ranked.reduce((a,h)=>a+h.fieldCount,0)} total fields · {ranked.reduce((a,h)=>a+h.totalAcres,0).toFixed(0)} total acres
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       <style>{`
         @media print {
