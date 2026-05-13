@@ -357,77 +357,84 @@ function DashboardTab({ fields, onRefresh, isAdmin, userOpName }) {
 // WEATHER BACKFILL — fetch historical data from plant date to today
 // ══════════════════════════════════════════════════════════════════════════════
 async function backfillWeather(fieldId, plantDate, zip, showToast) {
-  const OWM_KEY = 'bd5e378503939ddaee76f12ad7a97608'
+  const AW_KEY = 'zpka_05195b1020054ed3b0cce37865f0544b_481b2f9c'
   const today = new Date()
   const start = new Date(plantDate)
   const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24))
+  if (diffDays <= 0) return
 
-  if (diffDays <= 0) return // planted today or future, nothing to backfill
-
-  // Get lat/lon from zip first (needed for historical API)
-  let lat, lon
+  // Get AccuWeather location key from zip
+  let locationKey
   try {
-    const geoRes = await fetch(`https://api.openweathermap.org/geo/1.0/zip?zip=${zip},US&appid=${OWM_KEY}`)
-    const geo = await geoRes.json()
-    if (!geo.lat) { showToast('Could not get location for zip'); return }
-    lat = geo.lat; lon = geo.lon
+    const locRes = await fetch(`https://dataservice.accuweather.com/locations/v1/postalcodes/US/search?apikey=${AW_KEY}&q=${zip}`)
+    const locData = await locRes.json()
+    if (!locData || !locData[0]) { showToast('Could not find location for zip'); return }
+    locationKey = locData[0].Key
   } catch { showToast('Weather backfill failed — check zip code'); return }
 
-  // Get already-logged dates so we don't duplicate
-  const { data: existing } = await supabase.from('gdu_log').select('log_date').eq('field_id', fieldId)
+  const { data: existing } = await supabase.from('rain_log').select('log_date').eq('field_id', fieldId)
   const loggedDates = new Set((existing||[]).map(r => r.log_date))
 
-  let gduCount = 0, rainCount = 0, daysProcessed = 0
-  const daysToFill = Math.min(diffDays, 60) // cap at 60 days back
+  let rainCount = 0, daysProcessed = 0
+  const daysToFill = Math.min(diffDays, 60)
 
-  for (let i = 1; i <= daysToFill; i++) {
-    const d = new Date(start)
-    d.setDate(d.getDate() + i)
-    if (d >= today) break
+  // AccuWeather historical daily — fetch in chunks of up to 30 days
+  try {
+    // Use the last 30 days endpoint first
+    const histRes = await fetch(`https://dataservice.accuweather.com/currentconditions/v1/${locationKey}/historical/24?apikey=${AW_KEY}&details=true`)
+    const histData = await histRes.json()
 
-    const dateStr = d.toISOString().split('T')[0]
-    if (loggedDates.has(dateStr)) continue
+    if (Array.isArray(histData)) {
+      for (const day of histData) {
+        const dateStr = new Date(day.LocalObservationDateTime).toISOString().split('T')[0]
+        if (loggedDates.has(dateStr)) continue
+        const hi = Math.round(day.TemperatureSummary?.Past24HourRange?.Maximum?.Imperial?.Value || day.Temperature?.Imperial?.Value || 70)
+        const lo = Math.round(day.TemperatureSummary?.Past24HourRange?.Minimum?.Imperial?.Value || day.Temperature?.Imperial?.Value || 50)
+        const gdu = Math.max(0, Math.round((((Math.min(hi,86) + Math.max(lo,50)) / 2) - 50) * 10) / 10)
+        const rainIn = Math.round((day.PrecipitationSummary?.Past24Hours?.Imperial?.Value || 0) * 100) / 100
 
-    const unixTs = Math.floor(d.getTime() / 1000)
+        await supabase.from('gdu_log').insert([{ field_id:fieldId, log_date:dateStr, high_temp:hi, low_temp:lo, gdu }])
 
-    try {
-      const r = await fetch(`https://api.openweathermap.org/data/3.0/onecall/timemachine?lat=${lat}&lon=${lon}&dt=${unixTs}&units=imperial&appid=${OWM_KEY}`)
-      const data = await r.json()
-
-      // Try data.data[0] (v3) or data.hourly (v2 fallback)
-      const dayData = data.data?.[0] || null
-      if (!dayData) continue
-
-      // Get high/low from hourly if available
-      let hi = dayData.temp, lo = dayData.temp
-      if (data.data && data.data.length > 1) {
-        const temps = data.data.map(h => h.temp)
-        hi = Math.max(...temps)
-        lo = Math.min(...temps)
+        if (rainIn > 0 && !loggedDates.has(dateStr)) {
+          await supabase.from('rain_log').insert([{ field_id:fieldId, log_date:dateStr, amount:rainIn, note:'Auto backfilled (AccuWeather)' }])
+          rainCount++
+        }
+        daysProcessed++
       }
-
-      hi = Math.round(hi); lo = Math.round(lo)
-      const gdu = Math.max(0, Math.round((((Math.min(hi,86) + Math.max(lo,50)) / 2) - 50) * 10) / 10)
-      const rainMm = dayData.rain || 0
-      const rainIn = Math.round(rainMm / 25.4 * 100) / 100
-
-      await supabase.from('gdu_log').insert([{ field_id:fieldId, log_date:dateStr, high_temp:hi, low_temp:lo, gdu }])
-      gduCount++
-
-      if (rainIn > 0) {
-        await supabase.from('rain_log').insert([{ field_id:fieldId, log_date:dateStr, amount:rainIn, note:'Auto backfilled' }])
-        rainCount++
-      }
-      daysProcessed++
-    } catch(e) {
-      continue // skip days that fail
     }
+  } catch(e) {
+    // fallback to Open-Meteo if AccuWeather fails
+    try {
+      const locRes2 = await fetch(`https://api.openweathermap.org/geo/1.0/zip?zip=${zip},US&appid=bd5e378503939ddaee76f12ad7a97608`)
+      const geo = await locRes2.json()
+      if (geo.lat) {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${geo.lat}&longitude=${geo.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=America%2FChicago&start_date=${start.toISOString().split('T')[0]}&end_date=${today.toISOString().split('T')[0]}`
+        const omRes = await fetch(url)
+        const omData = await omRes.json()
+        if (omData.daily) {
+          for (let i = 0; i < omData.daily.time.length; i++) {
+            const dateStr = omData.daily.time[i]
+            if (loggedDates.has(dateStr)) continue
+            const hi = Math.round(omData.daily.temperature_2m_max[i])
+            const lo = Math.round(omData.daily.temperature_2m_min[i])
+            const gdu = Math.max(0, Math.round((((Math.min(hi,86)+Math.max(lo,50))/2)-50)*10)/10)
+            const rainIn = Math.round(omData.daily.precipitation_sum[i]*100)/100
+            await supabase.from('gdu_log').insert([{field_id:fieldId,log_date:dateStr,high_temp:hi,low_temp:lo,gdu}])
+            if (rainIn > 0) {
+              await supabase.from('rain_log').insert([{field_id:fieldId,log_date:dateStr,amount:rainIn,note:'Auto backfilled (Open-Meteo)'}])
+              rainCount++
+            }
+            daysProcessed++
+          }
+        }
+      }
+    } catch(e2) { /* silent fail */ }
   }
 
   if (daysProcessed > 0) {
-    showToast(`✓ Backfilled ${daysProcessed} days — ${gduCount} GDU entries, ${rainCount} rain events`)
+    showToast(`✓ Backfilled ${daysProcessed} days — ${rainCount} rain events logged`)
   } else {
-    showToast('Field saved! No historical data needed.')
+    showToast('Field saved! Weather data will auto-log nightly.')
   }
 }
 
